@@ -1,3 +1,65 @@
+# rnaseq-splice
+
+> **Fork notice.** This repository is a fork of [nf-core/rnaseq](https://github.com/nf-core/rnaseq) **3.27.0** with
+> rMATS differential splicing grafted in from [nf-core/rnasplice](https://github.com/nf-core/rnasplice) **2.0.0**.
+> Both upstream pipelines are MIT-licensed; please cite them (see [CITATIONS.md](CITATIONS.md)).
+
+## What this fork adds
+
+| Addition | Source | Location |
+| --- | --- | --- |
+| rMATS subworkflow (prep, bam lists, post) | nf-core/rnasplice 2.0.0 | `subworkflows/local/rmats/`, `modules/local/createbamlist/`, `modules/local/rmats/post/`, `modules/nf-core/rmats/prep/` |
+| rMATS process settings | nf-core/rnasplice `conf/modules.config` | `conf/modules/rmats.config` |
+| Optional `condition` samplesheet column | new | `assets/schema_input.json` |
+| `--contrasts` sheet (`contrast,treatment,control`) | nf-core/rnasplice | `assets/schema_contrasts.json` |
+| `--rmats` and `--rmats_*` parameters | nf-core/rnasplice | `nextflow.config`, `nextflow_schema.json` |
+| `test_rmats` profile | new | `conf/test_rmats.config`, `assets/test/` |
+
+rMATS runs on the final genome BAMs produced by the rnaseq alignment (after the percent-mapped filter and
+Picard duplicate marking). Strandedness inferred from `auto` is passed on to rMATS as `--libType`.
+
+### Running with differential splicing
+
+```bash
+nextflow run . -profile docker \
+    --input samplesheet.csv \
+    --contrasts contrasts.csv \
+    --rmats \
+    --rmats_read_len 100 \
+    --fasta genome.fa --gtf genes.gtf \
+    --outdir results
+```
+
+`samplesheet.csv` is the standard nf-core/rnaseq samplesheet plus a `condition` column:
+
+```csv
+sample,fastq_1,fastq_2,strandedness,condition
+CTRL_REP1,ctrl1_R1.fastq.gz,ctrl1_R2.fastq.gz,auto,CTRL
+KD_REP1,kd1_R1.fastq.gz,kd1_R2.fastq.gz,auto,KD
+```
+
+`contrasts.csv`:
+
+```csv
+contrast,treatment,control
+KD_vs_CTRL,KD,CTRL
+```
+
+Results are written to `<outdir>/<aligner>/rmats/<contrast>/`. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
+
+### Keeping up with upstream
+
+The upstream repository is the `upstream` remote. Fork changes are kept in separate files where possible; the only
+edits to upstream files are small blocks in `workflows/rnaseq/main.nf`, `nextflow.config`, `nextflow_schema.json`,
+`assets/schema_input.json` and `modules.json`.
+
+```bash
+git fetch upstream --tags
+git merge 3.28.0   # or whichever release
+```
+
+---
+
 <h1>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/nf-core-rnaseq_logo_dark.png">

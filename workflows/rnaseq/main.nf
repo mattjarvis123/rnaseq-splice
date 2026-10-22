@@ -59,6 +59,7 @@ include { BEDGRAPH_BEDCLIP_BEDGRAPHTOBIGWIG as BEDGRAPH_BEDCLIP_BEDGRAPHTOBIGWIG
 include { QUANTIFY_PSEUDO_ALIGNMENT as QUANTIFY_BAM_SALMON } from '../../subworkflows/nf-core/quantify_pseudo_alignment'
 include { QUANTIFY_PSEUDO_ALIGNMENT                         } from '../../subworkflows/nf-core/quantify_pseudo_alignment'
 include { FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS              } from '../../subworkflows/nf-core/fastq_qc_trim_filter_setstrandedness'
+include { RMATS                                             } from '../../subworkflows/local/rmats'  // ported from nf-core/rnasplice 2.0.0
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -532,6 +533,51 @@ workflow RNASEQ {
             .map { meta, files -> [meta.id, files] }
         ch_mqc_per_sample_bundle = ch_mqc_per_sample_bundle
             .join(ch_markdup_bundle, remainder: true)
+    }
+
+    //
+    // SUBWORKFLOW: rMATS differential splicing (ported from nf-core/rnasplice 2.0.0)
+    //
+    // Runs on the final genome BAMs (after the percent-mapped filter and duplicate marking;
+    // duplicates are marked, not removed). meta.strandedness has already been resolved from
+    // 'auto' by FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS, so the rMATS --libType is correct.
+    //
+    if (params.rmats) {
+        if (!params.contrasts) {
+            error("--rmats requires --contrasts: a CSV with columns contrast,treatment,control")
+        }
+
+        // [ sample_id, condition ] in samplesheet order. Paired rMATS stats pair the n-th
+        // treatment sample with the n-th control sample by this order.
+        ch_rmats_samples = channel
+            .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json"))
+            .map { row ->
+                def meta = row[0]
+                if (!meta.condition) {
+                    error("--rmats requires a 'condition' value for every row of the samplesheet; missing for sample '${meta.id}'")
+                }
+                [ meta.id as String, meta.condition as String ]
+            }
+
+        // [ contrast:, treatment:, control: ]
+        ch_rmats_contrasts = channel
+            .fromList(samplesheetToList(params.contrasts, "${projectDir}/assets/schema_contrasts.json"))
+            .map { row ->
+                def meta = row[0]
+                if (meta.treatment == meta.control) {
+                    error("Contrast '${meta.contrast}': treatment and control must differ")
+                }
+                [ contrast: meta.contrast, treatment: meta.treatment, control: meta.control ]
+            }
+
+        RMATS (
+            ch_rmats_samples,
+            ch_rmats_contrasts,
+            ch_genome_bam,
+            ch_gtf.map { gtf -> [ [:], gtf ] }.first(),
+            params.rmats_read_len,
+            params.rmats_paired_stats
+        )
     }
 
     //

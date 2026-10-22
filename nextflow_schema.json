@@ -698,7 +698,7 @@
                 "contaminant_screening_input": {
                     "type": "string",
                     "description": "Read set to screen for contaminants: aligner-unmapped reads (default), trimmed reads (post-BBSplit/rRNA), post-trim pre-BBSplit reads, or raw reads.",
-                    "help_text": "Use `unmapped` (default) to screen reads rejected by STAR/HISAT2 — requires alignment. Use `trimmed` to screen reads that passed BBSplit and rRNA filtering before alignment. Use `trim_only` to screen reads after adapter trimming but before BBSplit/rRNA removal — recommended when BBSplit removes expected contaminants. Use `raw` to screen pre-trimming reads (adapter sequences still present). `unmapped` requires `--aligner star_salmon`, `--aligner star_rsem`, or `--aligner hisat2`.",
+                    "help_text": "Use `unmapped` (default) to screen reads rejected by STAR/HISAT2 \u2014 requires alignment. Use `trimmed` to screen reads that passed BBSplit and rRNA filtering before alignment. Use `trim_only` to screen reads after adapter trimming but before BBSplit/rRNA removal \u2014 recommended when BBSplit removes expected contaminants. Use `raw` to screen pre-trimming reads (adapter sequences still present). `unmapped` requires `--aligner star_salmon`, `--aligner star_rsem`, or `--aligner hisat2`.",
                     "default": "unmapped",
                     "fa_icon": "fas fa-filter",
                     "enum": ["trimmed", "unmapped", "trim_only", "raw"]
@@ -1023,6 +1023,57 @@
                     "description": "Display hidden parameters in the help message (only works when --help or --help_full are provided)."
                 }
             }
+        },
+        "splicing_options": {
+            "title": "Differential splicing options",
+            "type": "object",
+            "fa_icon": "fas fa-cut",
+            "description": "Options for rMATS differential splicing, run on the genome BAM files after alignment.",
+            "properties": {
+                "rmats": {
+                    "type": "boolean",
+                    "description": "Run rMATS differential splicing analysis. Needs a genome aligner (star_salmon, star_rsem, hisat2 or bowtie2_salmon), a 'condition' column in the samplesheet and --contrasts.",
+                    "fa_icon": "fas fa-check"
+                },
+                "contrasts": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "schema": "assets/schema_contrasts.json",
+                    "mimetype": "text/csv",
+                    "pattern": "^\\S+\\.csv$",
+                    "description": "CSV with columns contrast,treatment,control. Treatment and control must match values of the samplesheet 'condition' column.",
+                    "fa_icon": "fas fa-file-csv"
+                },
+                "rmats_splice_diff_cutoff": {
+                    "type": "number",
+                    "default": 0.0001,
+                    "description": "Cutoff used in the null hypothesis test for differential splicing (rMATS --cstat)."
+                },
+                "rmats_paired_stats": {
+                    "type": "boolean",
+                    "description": "Use the paired stats model; the n-th treatment sample is paired with the n-th control sample in samplesheet order."
+                },
+                "rmats_read_len": {
+                    "type": "integer",
+                    "default": 40,
+                    "description": "Read length passed to rMATS (--readLength); --variable-read-length is always set."
+                },
+                "rmats_novel_splice_site": {
+                    "type": "boolean",
+                    "description": "Detect unannotated splice sites (rMATS --novelSS)."
+                },
+                "rmats_min_intron_len": {
+                    "type": "integer",
+                    "default": 50,
+                    "description": "Minimum intron length, with --rmats_novel_splice_site."
+                },
+                "rmats_max_exon_len": {
+                    "type": "integer",
+                    "default": 500,
+                    "description": "Maximum exon length, with --rmats_novel_splice_site."
+                }
+            }
         }
     },
     "allOf": [
@@ -1043,6 +1094,9 @@
         },
         {
             "$ref": "#/$defs/alignment_options"
+        },
+        {
+            "$ref": "#/$defs/splicing_options"
         },
         {
             "$ref": "#/$defs/optional_outputs"

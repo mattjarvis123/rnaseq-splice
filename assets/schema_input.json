@@ -33,6 +33,12 @@
                 "enum": ["forward", "reverse", "unstranded", "auto"],
                 "meta": ["strandedness"]
             },
+            "condition": {
+                "type": "string",
+                "pattern": "^(([A-Za-z]|[.][._A-Za-z])[._A-Za-z0-9]*)|[.]$",
+                "errorMessage": "Condition must be a syntactically valid R name (letters, numbers, dots, underscores; must start with a letter or dot not followed by a number). Required when --rmats is set.",
+                "meta": ["condition"]
+            },
             "seq_platform": {
                 "type": "string",
                 "pattern": "^\\S+$",
