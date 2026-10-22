@@ -1042,7 +1042,7 @@
                     "schema": "assets/schema_contrasts.json",
                     "mimetype": "text/csv",
                     "pattern": "^\\S+\\.csv$",
-                    "description": "CSV with columns contrast,treatment,control. Treatment and control must match values of the samplesheet 'condition' column.",
+                    "description": "CSV with columns contrast,treatment,control, shared by rMATS and limma. Treatment and control must match values of the samplesheet 'condition' column.",
                     "fa_icon": "fas fa-file-csv"
                 },
                 "rmats_splice_diff_cutoff": {
@@ -1074,6 +1074,29 @@
                     "description": "Maximum exon length, with --rmats_novel_splice_site."
                 }
             }
+        },
+        "differential_expression_options": {
+            "title": "Differential expression options",
+            "type": "object",
+            "fa_icon": "fas fa-balance-scale",
+            "description": "Options for limma/voom differential gene expression on the merged, length-scaled gene counts. Uses the same --contrasts sheet as rMATS.",
+            "properties": {
+                "limma": {
+                    "type": "boolean",
+                    "description": "Run limma/voom differential expression. Needs a 'condition' column in the samplesheet, --contrasts, and gene-level quantification (star_salmon, star_rsem, bowtie2_salmon or a pseudo-aligner).",
+                    "fa_icon": "fas fa-check"
+                },
+                "limma_min_count": {
+                    "type": "integer",
+                    "default": 10,
+                    "minimum": 0,
+                    "description": "Keep genes with at least this many counts in at least as many samples as the smallest condition group."
+                },
+                "limma_robust": {
+                    "type": "boolean",
+                    "description": "Use robust empirical Bayes moderation (eBayes robust=TRUE)."
+                }
+            }
         }
     },
     "allOf": [
@@ -1097,6 +1120,9 @@
         },
         {
             "$ref": "#/$defs/splicing_options"
+        },
+        {
+            "$ref": "#/$defs/differential_expression_options"
         },
         {
             "$ref": "#/$defs/optional_outputs"

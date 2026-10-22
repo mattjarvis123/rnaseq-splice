@@ -60,6 +60,7 @@ include { QUANTIFY_PSEUDO_ALIGNMENT as QUANTIFY_BAM_SALMON } from '../../subwork
 include { QUANTIFY_PSEUDO_ALIGNMENT                         } from '../../subworkflows/nf-core/quantify_pseudo_alignment'
 include { FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS              } from '../../subworkflows/nf-core/fastq_qc_trim_filter_setstrandedness'
 include { RMATS                                             } from '../../subworkflows/local/rmats'  // ported from nf-core/rnasplice 2.0.0
+include { DIFFERENTIAL_LIMMA                                } from '../../subworkflows/local/differential_limma'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -117,6 +118,8 @@ workflow RNASEQ {
     ch_strand_status = channel.empty()
     ch_percent_mapped = channel.empty()
     ch_unaligned_sequences = channel.empty()
+    ch_de_counts_aligner = channel.empty()   // merged gene counts for limma, from the genome aligner's quantification
+    ch_de_counts_pseudo = channel.empty()    // merged gene counts for limma, from the pseudo-aligner
 
     // Per-sample MultiQC bundle — `.join(..., remainder: true)` chains
     // fed to MULTIQC_RNASEQ. `collapseAgg` re-keys by meta.id at the end
@@ -433,6 +436,7 @@ workflow RNASEQ {
             params.skip_quantification_merge
         )
         ch_multiqc_files = ch_multiqc_files.mix(QUANTIFY_RSEM.out.stat)
+        ch_de_counts_aligner = QUANTIFY_RSEM.out.counts_gene_length_scaled
         ch_mqc_per_sample_bundle = ch_mqc_per_sample_bundle
             .join(QUANTIFY_RSEM.out.stat.map { meta, f -> [meta.id, f] }, remainder: true)
 
@@ -464,6 +468,7 @@ workflow RNASEQ {
             params.kallisto_quant_fraglen_sd,
             params.skip_quantification_merge
         )
+        ch_de_counts_aligner = QUANTIFY_BAM_SALMON.out.counts_gene_length_scaled
         if (!params.skip_qc && !params.skip_deseq2_qc && !params.skip_quantification_merge) {
             DESEQ2_QC_BAM_SALMON (
                 QUANTIFY_BAM_SALMON.out.counts_gene_length_scaled.map { _meta, counts -> counts },
@@ -536,31 +541,29 @@ workflow RNASEQ {
     }
 
     //
-    // SUBWORKFLOW: rMATS differential splicing (ported from nf-core/rnasplice 2.0.0)
+    // Samples and contrasts shared by rMATS and limma
     //
-    // Runs on the final genome BAMs (after the percent-mapped filter and duplicate marking;
-    // duplicates are marked, not removed). meta.strandedness has already been resolved from
-    // 'auto' by FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS, so the rMATS --libType is correct.
-    //
-    if (params.rmats) {
+    ch_de_samples = channel.empty()
+    ch_de_contrasts = channel.empty()
+    if (params.rmats || params.limma) {
         if (!params.contrasts) {
-            error("--rmats requires --contrasts: a CSV with columns contrast,treatment,control")
+            error("--rmats and --limma require --contrasts: a CSV with columns contrast,treatment,control")
         }
 
         // [ sample_id, condition ] in samplesheet order. Paired rMATS stats pair the n-th
         // treatment sample with the n-th control sample by this order.
-        ch_rmats_samples = channel
+        ch_de_samples = channel
             .fromList(samplesheetToList(params.input, "${projectDir}/assets/schema_input.json"))
             .map { row ->
                 def meta = row[0]
                 if (!meta.condition) {
-                    error("--rmats requires a 'condition' value for every row of the samplesheet; missing for sample '${meta.id}'")
+                    error("--rmats and --limma require a 'condition' value for every row of the samplesheet; missing for sample '${meta.id}'")
                 }
                 [ meta.id as String, meta.condition as String ]
             }
 
         // [ contrast:, treatment:, control: ]
-        ch_rmats_contrasts = channel
+        ch_de_contrasts = channel
             .fromList(samplesheetToList(params.contrasts, "${projectDir}/assets/schema_contrasts.json"))
             .map { row ->
                 def meta = row[0]
@@ -569,10 +572,19 @@ workflow RNASEQ {
                 }
                 [ contrast: meta.contrast, treatment: meta.treatment, control: meta.control ]
             }
+    }
 
+    //
+    // SUBWORKFLOW: rMATS differential splicing (ported from nf-core/rnasplice 2.0.0)
+    //
+    // Runs on the final genome BAMs (after the percent-mapped filter and duplicate marking;
+    // duplicates are marked, not removed). meta.strandedness has already been resolved from
+    // 'auto' by FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS, so the rMATS --libType is correct.
+    //
+    if (params.rmats) {
         RMATS (
-            ch_rmats_samples,
-            ch_rmats_contrasts,
+            ch_de_samples,
+            ch_de_contrasts,
             ch_genome_bam,
             ch_gtf.map { gtf -> [ [:], gtf ] }.first(),
             params.rmats_read_len,
@@ -835,6 +847,7 @@ workflow RNASEQ {
             params.skip_quantification_merge
         )
         ch_counts_gene_length_scaled = QUANTIFY_PSEUDO_ALIGNMENT.out.counts_gene_length_scaled
+        ch_de_counts_pseudo = ch_counts_gene_length_scaled
         ch_multiqc_files = ch_multiqc_files.mix(QUANTIFY_PSEUDO_ALIGNMENT.out.multiqc)
         ch_mqc_per_sample_bundle = ch_mqc_per_sample_bundle
             .join(QUANTIFY_PSEUDO_ALIGNMENT.out.multiqc.map { meta, f -> [meta.id, f] }, remainder: true)
@@ -848,6 +861,29 @@ workflow RNASEQ {
             ch_multiqc_files = ch_multiqc_files.mix(DESEQ2_QC_PSEUDO.out.pca_multiqc.collect().map { file -> [[:], file] })
             ch_multiqc_files = ch_multiqc_files.mix(DESEQ2_QC_PSEUDO.out.dists_multiqc.collect().map { file -> [[:], file] })
         }
+    }
+
+    //
+    // SUBWORKFLOW: limma/voom differential expression
+    //
+    // Uses the length-scaled merged gene counts (tximport lengthScaledTPM), as recommended
+    // for limma-voom. Counts from the genome aligner's quantification are preferred; the
+    // pseudo-aligner's are used when there are none (e.g. --skip_alignment or hisat2).
+    //
+    if (params.limma) {
+        if (params.skip_quantification_merge) {
+            error("--limma needs the merged gene count matrix; remove --skip_quantification_merge")
+        }
+        def has_aligner_counts = !params.skip_alignment && params.aligner in ['star_salmon', 'star_rsem', 'bowtie2_salmon']
+        def has_pseudo_counts  = params.pseudo_aligner && !params.skip_pseudo_alignment
+        if (!has_aligner_counts && !has_pseudo_counts) {
+            error("--limma needs gene-level quantification: use --aligner star_salmon, star_rsem or bowtie2_salmon, or set --pseudo_aligner")
+        }
+        DIFFERENTIAL_LIMMA (
+            has_aligner_counts ? ch_de_counts_aligner : ch_de_counts_pseudo,
+            ch_de_samples,
+            ch_de_contrasts
+        )
     }
 
     //

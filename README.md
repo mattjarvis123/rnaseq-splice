@@ -1,8 +1,9 @@
 # rnaseq-splice
 
 > **Fork notice.** This repository is a fork of [nf-core/rnaseq](https://github.com/nf-core/rnaseq) **3.27.0** with
-> rMATS differential splicing grafted in from [nf-core/rnasplice](https://github.com/nf-core/rnasplice) **2.0.0**.
-> Both upstream pipelines are MIT-licensed; please cite them (see [CITATIONS.md](CITATIONS.md)).
+> rMATS differential splicing grafted in from [nf-core/rnasplice](https://github.com/nf-core/rnasplice) **2.0.0**
+> and limma/voom differential expression from the nf-core `limma/differential` and `custom/matrixfilter` modules.
+> Upstream pipelines and modules are MIT-licensed; please cite them (see [CITATIONS.md](CITATIONS.md)).
 
 ## What this fork adds
 
@@ -13,12 +14,20 @@
 | Optional `condition` samplesheet column | new | `assets/schema_input.json` |
 | `--contrasts` sheet (`contrast,treatment,control`) | nf-core/rnasplice | `assets/schema_contrasts.json` |
 | `--rmats` and `--rmats_*` parameters | nf-core/rnasplice | `nextflow.config`, `nextflow_schema.json` |
-| `test_rmats` profile | new | `conf/test_rmats.config`, `assets/test/` |
+| limma/voom subworkflow (low-count filter, TMM, voom, lmFit, eBayes) | nf-core/modules `custom/matrixfilter`, `limma/differential` | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/` |
+| limma process settings | new | `conf/modules/limma.config` |
+| `--limma` and `--limma_*` parameters | new | `nextflow.config`, `nextflow_schema.json` |
+| `test_rmats` profile (runs rMATS and limma) | new | `conf/test_rmats.config`, `assets/test/` |
 
 rMATS runs on the final genome BAMs produced by the rnaseq alignment (after the percent-mapped filter and
 Picard duplicate marking). Strandedness inferred from `auto` is passed on to rMATS as `--libType`.
 
-### Running with differential splicing
+limma/voom runs on the merged, length-scaled gene counts (`salmon.merged.gene_counts_length_scaled.tsv`, or the RSEM /
+pseudo-aligner equivalent). Genes are kept if they have at least `--limma_min_count` counts (default 10) in at least as many
+samples as the smallest condition group; the model is `~ 0 + condition`, fitted on all samples, with one `topTable` per
+contrast (treatment vs control, so a positive logFC means higher in treatment).
+
+### Running with differential splicing and expression
 
 ```bash
 nextflow run . -profile docker \
@@ -26,6 +35,7 @@ nextflow run . -profile docker \
     --contrasts contrasts.csv \
     --rmats \
     --rmats_read_len 100 \
+    --limma \
     --fasta genome.fa --gtf genes.gtf \
     --outdir results
 ```
@@ -45,7 +55,9 @@ contrast,treatment,control
 KD_vs_CTRL,KD,CTRL
 ```
 
-Results are written to `<outdir>/<aligner>/rmats/<contrast>/`. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
+Results are written to `<outdir>/<aligner>/rmats/<contrast>/` and `<outdir>/<aligner>/limma/<contrast>/`
+(`*.limma.results.tsv`, mean-difference plot, voom-normalised log-CPM matrix, model and fitted `MArrayLM` object).
+`--rmats` and `--limma` can be used independently; both use the same `--contrasts` sheet. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
 
 ### Keeping up with upstream
 
