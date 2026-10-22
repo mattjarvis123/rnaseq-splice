@@ -86,7 +86,10 @@ ${colors.purple}  nf-core/rnaseq ${workflow.manifest.version}${colors.reset}
         before_text,
         after_text,
         command,
-        false
+        null    // cli_typecast: null lets nf-schema decide. Under Nextflow's strict syntax parser
+                // (default from 26.04) CLI values arrive as strings, so nf-schema casts them before
+                // validating; upstream passes false, which makes e.g. `--rmats_read_len 100` fail
+                // validation as [string]. rnaseq-splice fork change.
     )
 
     //

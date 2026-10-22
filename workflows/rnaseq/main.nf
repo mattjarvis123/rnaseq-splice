@@ -545,7 +545,11 @@ workflow RNASEQ {
     //
     ch_de_samples = channel.empty()
     ch_de_contrasts = channel.empty()
-    if (params.rmats || params.limma) {
+    // Booleans go through toString().toBoolean(): under Nextflow's strict syntax parser a
+    // CLI value such as `--rmats false` is the string "false", which Groovy treats as true.
+    def run_rmats = params.rmats.toString().toBoolean()
+    def run_limma = params.limma.toString().toBoolean()
+    if (run_rmats || run_limma) {
         if (!params.contrasts) {
             error("--rmats and --limma require --contrasts: a CSV with columns contrast,treatment,control")
         }
@@ -581,14 +585,14 @@ workflow RNASEQ {
     // duplicates are marked, not removed). meta.strandedness has already been resolved from
     // 'auto' by FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS, so the rMATS --libType is correct.
     //
-    if (params.rmats) {
+    if (run_rmats) {
         RMATS (
             ch_de_samples,
             ch_de_contrasts,
             ch_genome_bam,
             ch_gtf.map { gtf -> [ [:], gtf ] }.first(),
-            params.rmats_read_len,
-            params.rmats_paired_stats
+            params.rmats_read_len.toString().toInteger(),
+            params.rmats_paired_stats.toString().toBoolean()
         )
     }
 
@@ -870,7 +874,7 @@ workflow RNASEQ {
     // for limma-voom. Counts from the genome aligner's quantification are preferred; the
     // pseudo-aligner's are used when there are none (e.g. --skip_alignment or hisat2).
     //
-    if (params.limma) {
+    if (run_limma) {
         if (params.skip_quantification_merge) {
             error("--limma needs the merged gene count matrix; remove --skip_quantification_merge")
         }
