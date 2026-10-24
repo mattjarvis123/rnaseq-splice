@@ -36,6 +36,10 @@
 
   > Liao Y, Smyth GK, Shi W. featureCounts: an efficient general purpose program for assigning sequence reads to genomic features. Bioinformatics. 2014 Apr 1;30(7):923-30. doi: 10.1093/bioinformatics/btt656. Epub 2013 Nov 13. PubMed PMID: 24227677.
 
+- [fgsea](https://doi.org/10.1101/060012) (rnaseq-splice gene set enrichment)
+
+  > Korotkevich G, Sukhov V, Budin N, Shpak B, Artyomov MN, Sergushichev A. Fast gene set enrichment analysis. bioRxiv. 2021. doi: 10.1101/060012.
+
 - [fq](https://github.com/stjude-rust-labs/fq)
 
 - [GffRead](https://pubmed.ncbi.nlm.nih.gov/32489650/)

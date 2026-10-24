@@ -2,7 +2,8 @@
 
 > **Fork notice.** This repository is a fork of [nf-core/rnaseq](https://github.com/nf-core/rnaseq) **3.27.0** with
 > rMATS differential splicing grafted in from [nf-core/rnasplice](https://github.com/nf-core/rnasplice) **2.0.0**
-> and limma/voom differential expression from the nf-core `limma/differential` and `custom/matrixfilter` modules.
+> limma/voom differential expression from the nf-core `limma/differential` and `custom/matrixfilter` modules, and
+> fgsea gene set enrichment of both results.
 > Upstream pipelines and modules are MIT-licensed; please cite them (see [CITATIONS.md](CITATIONS.md)).
 
 ## What this fork adds
@@ -17,6 +18,8 @@
 | limma/voom subworkflow (low-count filter, TMM, voom, lmFit, eBayes) | nf-core/modules `custom/matrixfilter`, `limma/differential` | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/` |
 | limma process settings | new | `conf/modules/limma.config` |
 | `--limma` and `--limma_*` parameters | new | `nextflow.config`, `nextflow_schema.json` |
+| Gene set enrichment (fgsea): preranked GSEA of limma results, over-representation of rMATS genes | new (fgsea 1.32.2) | `subworkflows/local/gsea/`, `modules/local/fgsea/{de,splicing}/`, `bin/fgsea_de.R`, `bin/fgsea_splicing.R` |
+| GSEA process settings and `--gsea*` parameters | new | `conf/modules/gsea.config`, `nextflow.config`, `nextflow_schema.json` |
 | `test_rmats` profile (runs rMATS and limma) | new | `conf/test_rmats.config`, `assets/test/` |
 
 rMATS runs on the final genome BAMs produced by the rnaseq alignment (after the percent-mapped filter and
@@ -27,6 +30,24 @@ pseudo-aligner equivalent). Genes are kept if they have at least `--limma_min_co
 samples as the smallest condition group; the model is `~ 0 + condition`, fitted on all samples, with one `topTable` per
 contrast (treatment vs control, so a positive logFC means higher in treatment).
 
+Gene set enrichment (`--gsea`, needs `--gsea_gmt`) uses [fgsea](https://bioconductor.org/packages/fgsea/):
+
+- **Expression:** preranked GSEA (multilevel fgsea) of every tested gene, ranked by the limma moderated t-statistic
+  (`--gsea_rank_by logFC` to rank by fold change). Ensembl ids are mapped to gene symbols with the `gene_name` column of the
+  merged counts; a gene set is **Up** (NES > 0) or **Down** (NES < 0) at BH-adjusted p < `--gsea_fdr` (default 0.05).
+- **Splicing:** over-representation analysis (`fgsea::fora`) of genes with at least one significant rMATS event
+  (FDR < `--gsea_splicing_fdr`, |ΔPSI| > `--gsea_splicing_dpsi`), separately for higher- and lower-inclusion events. The
+  background is every gene with a tested rMATS event (junction counts, JC).
+- Gene sets come from one or more GMT files of gene symbols, e.g. MSigDB `*.symbols.gmt`; sets with 10-500 genes are tested
+  (`--gsea_min_size`, `--gsea_max_size`).
+
+Both R scripts in `bin/` also run on their own (usage is documented at the top of each script).
+
+The pipeline never filters genes or events by significance: `limma/`, `rmats/` and `gsea/` contain results for everything
+tested. The cut-offs used by the results report are set with `--report_de_fdr` (0.01), `--report_de_lfc` (0),
+`--report_splicing_fdr` (0.01) and `--report_splicing_dpsi` (0), e.g. in `params.yaml`; they are recorded in
+`pipeline_info/params_*.json`, which the report reads.
+
 ### Running with differential splicing and expression
 
 ```bash
@@ -36,6 +57,7 @@ nextflow run . -profile docker \
     --rmats \
     --rmats_read_len 100 \
     --limma \
+    --gsea --gsea_gmt h.all.v2024.1.Hs.symbols.gmt,c2.cp.reactome.v2024.1.Hs.symbols.gmt \
     --fasta genome.fa --gtf genes.gtf \
     --outdir results
 ```
@@ -57,7 +79,9 @@ KD_vs_CTRL,KD,CTRL
 
 Results are written to `<outdir>/<aligner>/rmats/<contrast>/` and `<outdir>/<aligner>/limma/<contrast>/`
 (`*.limma.results.tsv`, mean-difference plot, voom-normalised log-CPM matrix, model and fitted `MArrayLM` object).
-`--rmats` and `--limma` can be used independently; both use the same `--contrasts` sheet. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
+Gene set results are in `<outdir>/<aligner>/gsea/<contrast>/` (`*.fgsea_de.tsv`, `*.fgsea_ranks.tsv`,
+`*.fgsea_splicing.tsv`, `*.fgsea_splicing_genes.tsv`). `--rmats` and `--limma` can be used independently; both use the
+same `--contrasts` sheet. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
 
 ### Keeping up with upstream
 

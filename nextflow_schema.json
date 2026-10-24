@@ -1097,6 +1097,99 @@
                     "description": "Use robust empirical Bayes moderation (eBayes robust=TRUE)."
                 }
             }
+        },
+        "gene_set_enrichment_options": {
+            "title": "Gene set enrichment options",
+            "type": "object",
+            "fa_icon": "fas fa-project-diagram",
+            "description": "Gene set enrichment with fgsea: preranked GSEA of the limma/voom results and over-representation analysis of genes with significant rMATS events. Needs --limma and/or --rmats.",
+            "properties": {
+                "gsea": {
+                    "type": "boolean",
+                    "description": "Run gene set enrichment on the limma/voom (preranked fgsea) and rMATS (fgsea::fora) results. Needs --gsea_gmt and --limma and/or --rmats.",
+                    "fa_icon": "fas fa-check"
+                },
+                "gsea_gmt": {
+                    "type": "string",
+                    "pattern": "^\\S+\\.gmt(,\\S+\\.gmt)*$",
+                    "description": "Comma-separated GMT files of gene sets keyed by gene symbol, e.g. MSigDB h.all.v2024.1.Hs.symbols.gmt,c2.cp.reactome.v2024.1.Hs.symbols.gmt.",
+                    "fa_icon": "fas fa-file-alt"
+                },
+                "gsea_fdr": {
+                    "type": "number",
+                    "default": 0.05,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "BH-adjusted p-value below which a gene set is called enriched (Up/Down for DE, per gene list for splicing)."
+                },
+                "gsea_min_size": {
+                    "type": "integer",
+                    "default": 10,
+                    "minimum": 1,
+                    "description": "Smallest gene set tested (genes present in the ranked list or universe)."
+                },
+                "gsea_max_size": {
+                    "type": "integer",
+                    "default": 500,
+                    "minimum": 1,
+                    "description": "Largest gene set tested."
+                },
+                "gsea_rank_by": {
+                    "type": "string",
+                    "default": "t",
+                    "enum": ["t", "logFC"],
+                    "description": "limma column used to rank genes for preranked GSEA: moderated t-statistic or log2 fold change."
+                },
+                "gsea_splicing_fdr": {
+                    "type": "number",
+                    "default": 0.01,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "rMATS FDR below which an event counts as significant when building the splicing gene lists."
+                },
+                "gsea_splicing_dpsi": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "|dPSI| above which an event counts as significant when building the splicing gene lists (0 = no cut-off)."
+                }
+            }
+        },
+        "report_options": {
+            "title": "Report options",
+            "type": "object",
+            "fa_icon": "fas fa-chart-bar",
+            "description": "Significance cut-offs used by the results report only. The pipeline always writes results for every gene and splicing event; these values are recorded in pipeline_info/params_*.json for the report to read.",
+            "properties": {
+                "report_de_fdr": {
+                    "type": "number",
+                    "default": 0.01,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Report: limma adjusted p-value (BH) below which a gene is differentially expressed."
+                },
+                "report_de_lfc": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Report: |log2 fold change| above which a gene is differentially expressed (0 = no fold-change cut-off)."
+                },
+                "report_splicing_fdr": {
+                    "type": "number",
+                    "default": 0.01,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Report: rMATS FDR below which a splicing event is significant."
+                },
+                "report_splicing_dpsi": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Report: |dPSI| above which a splicing event is significant (0 = no dPSI cut-off)."
+                }
+            }
         }
     },
     "allOf": [
@@ -1123,6 +1216,12 @@
         },
         {
             "$ref": "#/$defs/differential_expression_options"
+        },
+        {
+            "$ref": "#/$defs/gene_set_enrichment_options"
+        },
+        {
+            "$ref": "#/$defs/report_options"
         },
         {
             "$ref": "#/$defs/optional_outputs"

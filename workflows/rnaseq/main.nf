@@ -61,6 +61,7 @@ include { QUANTIFY_PSEUDO_ALIGNMENT                         } from '../../subwor
 include { FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS              } from '../../subworkflows/nf-core/fastq_qc_trim_filter_setstrandedness'
 include { RMATS                                             } from '../../subworkflows/local/rmats'  // ported from nf-core/rnasplice 2.0.0
 include { DIFFERENTIAL_LIMMA                                } from '../../subworkflows/local/differential_limma'
+include { GSEA                                              } from '../../subworkflows/local/gsea'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -883,10 +884,35 @@ workflow RNASEQ {
         if (!has_aligner_counts && !has_pseudo_counts) {
             error("--limma needs gene-level quantification: use --aligner star_salmon, star_rsem or bowtie2_salmon, or set --pseudo_aligner")
         }
+        ch_limma_counts = has_aligner_counts ? ch_de_counts_aligner : ch_de_counts_pseudo
         DIFFERENTIAL_LIMMA (
-            has_aligner_counts ? ch_de_counts_aligner : ch_de_counts_pseudo,
+            ch_limma_counts,
             ch_de_samples,
             ch_de_contrasts
+        )
+    }
+
+    //
+    // SUBWORKFLOW: gene set enrichment (fgsea) of the limma and rMATS results
+    //
+    // Preranked GSEA of each limma contrast (genes ranked by the limma statistic, Ensembl ids
+    // mapped to symbols with the gene_name column of the merged counts) and over-representation
+    // analysis of the genes with significant rMATS events. rnaseq-splice addition.
+    //
+    if (params.gsea.toString().toBoolean()) {
+        if (!params.gsea_gmt) {
+            error("--gsea needs --gsea_gmt: one or more comma-separated GMT files of gene-symbol gene sets (e.g. MSigDB *.symbols.gmt)")
+        }
+        if (!run_limma && !run_rmats) {
+            error("--gsea needs --limma and/or --rmats")
+        }
+        ch_gmt = channel.value(params.gsea_gmt.toString().tokenize(',').collect { gmt -> file(gmt.trim(), checkIfExists: true) })
+        GSEA (
+            run_limma ? DIFFERENTIAL_LIMMA.out.results : channel.empty(),
+            run_limma ? ch_limma_counts.map { _meta, tsv -> tsv }.first() : channel.value([]),
+            run_rmats ? RMATS.out.mats : channel.empty(),
+            ch_gmt,
+            'JC'
         )
     }
 
