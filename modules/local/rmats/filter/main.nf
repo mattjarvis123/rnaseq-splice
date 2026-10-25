@@ -22,7 +22,9 @@ process RMATS_FILTER {
     output:
     tuple val(meta), path("${prefix}/filtered/*.MATS.{JC,JCEC}.txt"), emit: mats
     tuple val(meta), path("${prefix}/filtered/filter_summary.tsv")   , emit: summary
-    tuple val("${task.process}"), val('r-base'), eval('Rscript -e "cat(R.version.string)" | sed "s/R version //; s/ .*//"'), topic: versions, emit: versions_r
+    // No `eval` version output: Nextflow numbers eval outputs across the whole pipeline, so a new
+    // one renumbers those of other processes and invalidates their -resume cache. The script is
+    // base R in the rMATS container, whose versions RMATS_POST already reports.
 
     when:
     task.ext.when == null || task.ext.when
