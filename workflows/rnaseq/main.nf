@@ -593,7 +593,8 @@ workflow RNASEQ {
             ch_genome_bam,
             ch_gtf.map { gtf -> [ [:], gtf ] }.first(),
             params.rmats_read_len.toString().toInteger(),
-            params.rmats_paired_stats.toString().toBoolean()
+            params.rmats_paired_stats.toString().toBoolean(),
+            params.rmats_min_reads.toString().toInteger()
         )
     }
 
@@ -910,7 +911,7 @@ workflow RNASEQ {
         GSEA (
             run_limma ? DIFFERENTIAL_LIMMA.out.results : channel.empty(),
             run_limma ? ch_limma_counts.map { _meta, tsv -> tsv }.first() : channel.value([]),
-            run_rmats ? RMATS.out.mats : channel.empty(),
+            run_rmats ? RMATS.out.mats_filtered : channel.empty(),
             ch_gmt,
             'JC'
         )

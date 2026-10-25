@@ -42,6 +42,7 @@ nextflow_workflow {
                 input[3] = [ [ id:'genome' ], file(params.pipelines_testdata_base_path + 'reference/genes_chrX.gtf', checkIfExists: true) ]
                 input[4] = 40
                 input[5] = false
+                input[6] = 10
                 """
             }
         }
@@ -92,6 +93,7 @@ nextflow_workflow {
                 input[3] = [ [ id:'genome' ], file(params.pipelines_testdata_base_path + 'reference/genes_chrX.gtf', checkIfExists: true) ]
                 input[4] = 40
                 input[5] = true
+                input[6] = 10
                 """
             }
         }
@@ -136,6 +138,7 @@ nextflow_workflow {
                 input[3] = [ [ id:'genome' ], file(params.pipelines_testdata_base_path + 'reference/genes_chrX.gtf', checkIfExists: true) ]
                 input[4] = 40
                 input[5] = false
+                input[6] = 10
                 """
             }
         }
@@ -183,6 +186,7 @@ nextflow_workflow {
                 input[3] = [ [ id:'genome' ], file(params.pipelines_testdata_base_path + 'reference/genes_chrX.gtf', checkIfExists: true) ]
                 input[4] = 40
                 input[5] = true
+                input[6] = 10
                 """
             }
         }
@@ -225,6 +229,7 @@ nextflow_workflow {
                 input[3] = [ [ id:'genome' ], file(params.pipelines_testdata_base_path + 'reference/genes_chrX.gtf', checkIfExists: true) ]
                 input[4] = 40
                 input[5] = false
+                input[6] = 10
                 """
             }
         }

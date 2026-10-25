@@ -1072,6 +1072,12 @@
                     "type": "integer",
                     "default": 500,
                     "description": "Maximum exon length, with --rmats_novel_splice_site."
+                },
+                "rmats_min_reads": {
+                    "type": "integer",
+                    "default": 10,
+                    "minimum": 0,
+                    "description": "Read-coverage filter: keep rMATS events with at least this many junction reads (inclusion + skipping) in every replicate of both conditions, and recompute the FDR over the retained events. The filtered tables (rmats/<contrast>/filtered/) feed fgsea and the report; the unfiltered rMATS output is kept. 0 turns the filter off."
                 }
             }
         },

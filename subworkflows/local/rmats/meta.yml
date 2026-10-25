@@ -45,6 +45,11 @@ input:
       description: |
         Whether treatment and control samples are paired. Every condition of a contrast must then
         have the same number of samples
+  - rmats_min_reads:
+      type: integer
+      description: |
+        Minimum junction reads (IJC + SJC) in every replicate of both conditions for an event to be
+        kept by RMATS_FILTER, which also recomputes the BH FDR over the kept events. 0 skips the filter
 output:
   - rmats:
       type: file
@@ -78,6 +83,19 @@ output:
         Channel containing the rMATS results of each alternative splicing event type
         Structure: [ val(meta), [ path(txt) ] ]
       pattern: "*.MATS.{JC,JCEC}.txt"
+  - mats_filtered:
+      type: file
+      description: |
+        Channel containing the rMATS results after the read-coverage filter, with the FDR recomputed
+        over the kept events (the unfiltered tables when rmats_min_reads is 0)
+        Structure: [ val(meta), [ path(txt) ] ]
+      pattern: "filtered/*.MATS.{JC,JCEC}.txt"
+  - filter_summary:
+      type: file
+      description: |
+        Channel containing the number of events kept per table by the read-coverage filter
+        Structure: [ val(meta), path(tsv) ]
+      pattern: "filter_summary.tsv"
   - from_gtf:
       type: file
       description: |

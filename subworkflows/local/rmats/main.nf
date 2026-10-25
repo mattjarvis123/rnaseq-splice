@@ -6,6 +6,7 @@ include { RMATS_PREP } from '../../../modules/nf-core/rmats/prep'
 
 include { CREATEBAMLIST } from '../../../modules/local/createbamlist'
 include { RMATS_POST } from '../../../modules/local/rmats/post'
+include { RMATS_FILTER } from '../../../modules/local/rmats/filter'
 
 workflow RMATS {
     take:
@@ -15,6 +16,7 @@ workflow RMATS {
     ch_gtf // channel: [ val(meta), path(gtf) ]
     rmats_read_len // integer: --readLength of both rMATS steps
     rmats_paired_stats // boolean: pair the treatment and control samples
+    rmats_min_reads // number: minimum IJC + SJC in every replicate for an event to be kept (0 = keep all)
 
     main:
 
@@ -152,12 +154,31 @@ workflow RMATS {
         rmats_read_len,
     )
 
+    //
+    // MODULE: RMATS_FILTER
+    //
+
+    // Read-coverage filter with the FDR recomputed over the retained events. The unfiltered
+    // tables stay in the results; the filtered ones feed fgsea and the report. With
+    // rmats_min_reads 0 the step is skipped and the unfiltered tables are used downstream.
+    ch_mats_filtered = RMATS_POST.out.mats
+    ch_filter_summary = channel.empty()
+    if (rmats_min_reads > 0) {
+        RMATS_FILTER(
+            RMATS_POST.out.mats
+        )
+        ch_mats_filtered = RMATS_FILTER.out.mats
+        ch_filter_summary = RMATS_FILTER.out.summary
+    }
+
     emit:
     rmats = RMATS_PREP.out.rmats // channel: [ val(meta), path(rmats) ]
     read_outcomes = RMATS_PREP.out.read_outcomes // channel: [ val(meta), path(txt) ]
     bam_list1 = CREATEBAMLIST.out.bam_list1 // channel: [ val(contrast), path(txt) ]
     bam_list2 = CREATEBAMLIST.out.bam_list2 // channel: [ val(contrast), path(txt) ]
-    mats = RMATS_POST.out.mats // channel: [ val(meta), [ path(txt) ] ]
+    mats = RMATS_POST.out.mats // channel: [ val(meta), [ path(txt) ] ], all events
+    mats_filtered = ch_mats_filtered // channel: [ val(meta), [ path(txt) ] ], events passing rmats_min_reads
+    filter_summary = ch_filter_summary // channel: [ val(meta), path(tsv) ]
     from_gtf = RMATS_POST.out.from_gtf // channel: [ val(meta), [ path(txt) ] ]
     raw_input = RMATS_POST.out.raw_input // channel: [ val(meta), [ path(txt) ] ]
     summary = RMATS_POST.out.summary // channel: [ val(meta), path(txt) ]
