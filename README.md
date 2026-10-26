@@ -159,11 +159,24 @@ See [docs/splice_output.md](docs/splice_output.md) for a description of every fi
 
 The pipeline was checked against a public positive control: ENCODE shRNA knockdowns of the splicing factor U2AF2 in
 K562 ([ENCSR904CJQ](https://www.encodeproject.org/experiments/ENCSR904CJQ/)) and HepG2
-([ENCSR426UUG](https://www.encodeproject.org/experiments/ENCSR426UUG/)) cells, compared with ENCODE's own processed
-differential expression and rMATS results ([Van Nostrand _et al._, 2020](https://doi.org/10.1038/s41586-020-2077-3)).
-In K562, log2 fold changes agreed with ENCODE's at r = 0.87 and ΔPSI values of matched splicing events at
-r = 0.96–0.98, with the pipeline detecting more significant genes and events than ENCODE's older tool versions.
-The [example report](https://mattjarvis123.github.io/rnaseq-splice/) shows the results of this run.
+([ENCSR426UUG](https://www.encodeproject.org/experiments/ENCSR426UUG/)) cells, compared with ENCODE's published
+differential expression calls and rMATS results ([Van Nostrand _et al._, 2020](https://doi.org/10.1038/s41586-020-2077-3))
+under ENCODE's significance rules (DE: adjusted p < 0.05; splicing: FDR < 0.05, p < 0.05, |ΔPSI| > 0.05), with the
+pipeline's 10-read coverage filter applied to both sides.
+
+|                                                               | K562          | HepG2         |
+| ------------------------------------------------------------- | ------------- | ------------- |
+| log2FC correlation with ENCODE's published DE results         | r = 0.91      | r = 0.94      |
+| ENCODE's DE genes also called here, same direction (recall)   | 38%           | 98%           |
+| DE genes called here that ENCODE also calls (precision)       | 71%           | 36%           |
+| ΔPSI correlation, all matched events (range over event types) | r = 0.89–0.93 | r = 0.89–0.94 |
+| ΔPSI correlation, events ENCODE called significant            | r = 0.96–0.98 | r = 0.95–0.97 |
+| ENCODE-significant events recovered, of those matched         | 80–96%        | 85–93%        |
+
+Fold changes agree closely in both cell lines, with no gene called in opposite directions. The number of significant
+genes differs because the statistical methods differ (limma/voom here, a DESeq and Cuffdiff consensus at ENCODE). In
+HepG2, U2AF2 mRNA itself is only weakly reduced, in ENCODE's data as well as here, yet the splicing changes are
+extensive. The [example report](https://mattjarvis123.github.io/rnaseq-splice/) shows the results of this run.
 
 ## Running on a cluster or shared storage
 
