@@ -106,10 +106,19 @@
   </ul>
 
   <h2>Validation</h2>
-  <p>The pipeline's results were compared with ENCODE's own processed differential expression and rMATS results for the
-    same experiments. In K562, log2 fold changes agreed with ENCODE's at r&nbsp;=&nbsp;0.87 and ΔPSI values of matched
-    splicing events at r&nbsp;=&nbsp;0.96–0.98, with the pipeline detecting more significant genes and events than
-    ENCODE's older tool versions.</p>
+  <p>The pipeline's results were compared with ENCODE's published differential expression calls and rMATS results for the
+    same experiments, under ENCODE's significance rules and with the pipeline's read-coverage filter applied to both sides.</p>
+  <table>
+    <thead><tr><th>Agreement with ENCODE</th><th>K562</th><th>HepG2</th></tr></thead>
+    <tbody>
+      <tr><td>log2 fold change correlation</td><td>r&nbsp;=&nbsp;0.91</td><td>r&nbsp;=&nbsp;0.94</td></tr>
+      <tr><td>ΔPSI correlation, all matched splicing events</td><td>r&nbsp;=&nbsp;0.89–0.93</td><td>r&nbsp;=&nbsp;0.89–0.94</td></tr>
+      <tr><td>ΔPSI correlation, events ENCODE called significant</td><td>r&nbsp;=&nbsp;0.96–0.98</td><td>r&nbsp;=&nbsp;0.95–0.97</td></tr>
+    </tbody>
+  </table>
+  <p>Ranges cover the five rMATS event types. No gene is called in opposite directions in either cell line. Recall,
+    precision and the full method are in the
+    <a href="https://github.com/mattjarvis123/rnaseq-splice#validation">README</a>.</p>
 
   <h2>How it was made</h2>
   <p>rnaseq-splice (pre-release, built on nf-core/rnaseq 3.27.0) with STAR and Salmon, rMATS 4.3.0 with the read-coverage
