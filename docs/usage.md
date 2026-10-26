@@ -1,5 +1,10 @@
 # nf-core/rnaseq: Usage
 
+> [!NOTE]
+> This page is the upstream nf-core/rnaseq 3.27.0 usage documentation, which applies unchanged to rnaseq-splice.
+> Differential splicing, differential expression, gene set enrichment and the results report are documented in
+> [splice_usage.md](splice_usage.md).
+
 ## :warning: Please read this documentation on the nf-core website: [https://nf-co.re/rnaseq/usage](https://nf-co.re/rnaseq/usage)
 
 > _Documentation of pipeline parameters is generated automatically from the pipeline schema and can no longer be found in markdown files._

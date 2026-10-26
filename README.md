@@ -1,255 +1,221 @@
 # rnaseq-splice
 
-> **Fork notice.** This repository is a fork of [nf-core/rnaseq](https://github.com/nf-core/rnaseq) **3.27.0** with
-> rMATS differential splicing grafted in from [nf-core/rnasplice](https://github.com/nf-core/rnasplice) **2.0.0**
-> limma/voom differential expression from the nf-core `limma/differential` and `custom/matrixfilter` modules, and
-> fgsea gene set enrichment of both results.
-> Upstream pipelines and modules are MIT-licensed; please cite them (see [CITATIONS.md](CITATIONS.md)).
+[![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A525.10.4-0DC09D?logo=nextflow&logoColor=white)](https://www.nextflow.io/)
+[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
+[![run with apptainer](https://img.shields.io/badge/run%20with-apptainer%2Fsingularity-1d355c?labelColor=000000)](https://apptainer.org/)
+[![Built on nf-core/rnaseq 3.27.0](https://img.shields.io/badge/built%20on-nf--core%2Frnaseq%203.27.0-24B064)](https://github.com/nf-core/rnaseq/releases/tag/3.27.0)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-## What this fork adds
+**rnaseq-splice** is a Nextflow pipeline for bulk RNA-seq that goes from FASTQ files to differential expression,
+differential splicing, gene set enrichment and an interactive HTML results report in a single run.
 
-| Addition | Source | Location |
-| --- | --- | --- |
-| rMATS subworkflow (prep, bam lists, post) | nf-core/rnasplice 2.0.0 | `subworkflows/local/rmats/`, `modules/local/createbamlist/`, `modules/local/rmats/post/`, `modules/nf-core/rmats/prep/` |
-| rMATS process settings | nf-core/rnasplice `conf/modules.config` | `conf/modules/rmats.config` |
-| Optional `condition` samplesheet column | new | `assets/schema_input.json` |
-| `--contrasts` sheet (`contrast,treatment,control`) | nf-core/rnasplice | `assets/schema_contrasts.json` |
-| `--rmats` and `--rmats_*` parameters | nf-core/rnasplice | `nextflow.config`, `nextflow_schema.json` |
-| limma/voom subworkflow (low-count filter, TMM, voom, lmFit, eBayes) | nf-core/modules `custom/matrixfilter`, `limma/differential` | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/` |
-| limma process settings | new | `conf/modules/limma.config` |
-| `--limma` and `--limma_*` parameters | new | `nextflow.config`, `nextflow_schema.json` |
-| Gene set enrichment (fgsea): preranked GSEA of limma results, over-representation of rMATS genes | new (fgsea 1.32.2) | `subworkflows/local/gsea/`, `modules/local/fgsea/{de,splicing}/`, `bin/fgsea_de.R`, `bin/fgsea_splicing.R` |
-| GSEA process settings and `--gsea*` parameters | new | `conf/modules/gsea.config`, `nextflow.config`, `nextflow_schema.json` |
-| `test_rmats` profile (runs rMATS and limma) | new | `conf/test_rmats.config`, `assets/test/` |
+It is built on [nf-core/rnaseq 3.27.0](https://github.com/nf-core/rnaseq/releases/tag/3.27.0), which provides read QC,
+trimming, alignment, quantification and quality control, and adds:
 
-rMATS runs on the final genome BAMs produced by the rnaseq alignment (after the percent-mapped filter and
-Picard duplicate marking). Strandedness inferred from `auto` is passed on to rMATS as `--libType`.
+- **Differential splicing** with [rMATS](https://github.com/Xinglab/rmats-turbo) (ported from
+  [nf-core/rnasplice 2.0.0](https://github.com/nf-core/rnasplice/releases/tag/2.0.0)), with a read-coverage filter and
+  FDR recalculation on the events that pass it.
+- **Differential expression** with [limma/voom](https://bioconductor.org/packages/limma/) (TMM normalisation, voom
+  weights, empirical Bayes moderation), using the nf-core `limma/differential` module.
+- **Gene set enrichment** with [fgsea](https://bioconductor.org/packages/fgsea/): preranked GSEA of the limma results and
+  over-representation analysis of the differentially spliced genes, against any MSigDB-style GMT files.
+- **A results report**: a self-contained HTML dashboard with QC, sample structure, volcano and MA plots, splicing event
+  views, cross-contrast comparisons, gene set results, KEGG pathway maps and a gene lookup.
 
-limma/voom runs on the merged, length-scaled gene counts (`salmon.merged.gene_counts_length_scaled.tsv`, or the RSEM /
-pseudo-aligner equivalent). Genes are kept if they have at least `--limma_min_count` counts (default 10) in at least as many
-samples as the smallest condition group; the model is `~ 0 + condition`, fitted on all samples, with one `topTable` per
-contrast (treatment vs control, so a positive logFC means higher in treatment).
+All additions are opt-in. Without `--rmats`, `--limma` or `--gsea` the pipeline behaves exactly like nf-core/rnaseq 3.27.0.
 
-Gene set enrichment (`--gsea`, needs `--gsea_gmt`) uses [fgsea](https://bioconductor.org/packages/fgsea/):
+**Example output:** [ENCODE U2AF2 knockdown report](https://mattjarvis123.github.io/rnaseq-splice/) (K562 and HepG2,
+public data; see [Validation](#validation)).
 
-- **Expression:** preranked GSEA (multilevel fgsea) of every tested gene, ranked by the limma moderated t-statistic
-  (`--gsea_rank_by logFC` to rank by fold change). Ensembl ids are mapped to gene symbols with the `gene_name` column of the
-  merged counts; a gene set is **Up** (NES > 0) or **Down** (NES < 0) at BH-adjusted p < `--gsea_fdr` (default 0.05).
-- **Splicing:** over-representation analysis (`fgsea::fora`) of genes with at least one significant rMATS event
-  (FDR < `--gsea_splicing_fdr`, |ΔPSI| > `--gsea_splicing_dpsi`), separately for higher- and lower-inclusion events. The
-  background is every gene with a tested rMATS event (junction counts, JC).
-- Gene sets come from one or more GMT files of gene symbols, e.g. MSigDB `*.symbols.gmt`; sets with 10-500 genes are tested
-  (`--gsea_min_size`, `--gsea_max_size`).
+## Pipeline overview
 
-Both R scripts in `bin/` also run on their own (usage is documented at the top of each script).
-
-The pipeline never filters genes or events by significance: `limma/`, `rmats/` and `gsea/` contain results for everything
-tested. The cut-offs used by the results report are set with `--report_de_fdr` (0.01), `--report_de_lfc` (0),
-`--report_splicing_fdr` (0.01) and `--report_splicing_dpsi` (0), e.g. in `params.yaml`; they are recorded in
-`pipeline_info/params_*.json`, which the report reads.
-
-### Running with differential splicing and expression
-
-```bash
-nextflow run . -profile docker \
-    --input samplesheet.csv \
-    --contrasts contrasts.csv \
-    --rmats \
-    --rmats_read_len 100 \
-    --limma \
-    --gsea --gsea_gmt h.all.v2024.1.Hs.symbols.gmt,c2.cp.reactome.v2024.1.Hs.symbols.gmt \
-    --fasta genome.fa --gtf genes.gtf \
-    --outdir results
+```mermaid
+flowchart LR
+    A["FASTQ files<br/>samplesheet with condition<br/>contrasts sheet"] --> B["nf-core/rnaseq 3.27.0<br/>FastQC, Trim Galore, STAR, Salmon,<br/>MarkDuplicates, RSeQC, Qualimap, MultiQC"]
+    B -- "genome BAMs" --> C["rMATS<br/>prep, post, coverage filter"]
+    B -- "length-scaled gene counts" --> D["limma/voom<br/>filter, TMM, voom, eBayes"]
+    C --> E["fgsea<br/>over-representation of spliced genes"]
+    D --> F["fgsea<br/>preranked GSEA"]
+    B --> G["HTML results report"]
+    C --> G
+    D --> G
+    E --> G
+    F --> G
 ```
 
-`samplesheet.csv` is the standard nf-core/rnaseq samplesheet plus a `condition` column:
+Every comparison in the contrasts sheet gets both differential expression and differential splicing results, so the
+two can be compared gene by gene.
 
-```csv
+## Quick start
+
+1. Install [Nextflow](https://www.nextflow.io/docs/latest/install.html) (>= 25.10.4) and
+   [Docker](https://docs.docker.com/engine/installation/) or [Apptainer/Singularity](https://apptainer.org/).
+
+2. Check that everything works with the built-in test profile, a small public yeast dataset with rMATS and limma
+   switched on:
+
+   ```bash
+   nextflow run mattjarvis123/rnaseq-splice -r main -profile test_rmats,docker --outdir test_results
+   ```
+
+3. Run your own data. Write the settings in a parameters file (recommended: see
+   [Command-line booleans](docs/splice_usage.md#command-line-booleans)):
+
+   ```yaml title="params.yaml"
+   input: samplesheet.csv
+   contrasts: contrasts.csv
+   fasta: GRCh38.primary_assembly.genome.fa.gz
+   gtf: gencode.v46.primary_assembly.annotation.gtf.gz
+   outdir: results
+
+   rmats: true
+   rmats_read_len: 100 # your read length
+   limma: true
+   gsea: true
+   gsea_gmt: h.all.v2026.2.Hs.symbols.gmt,c2.cp.reactome.v2026.2.Hs.symbols.gmt,c2.cp.kegg_legacy.v2026.2.Hs.symbols.gmt
+   ```
+
+   ```bash
+   nextflow run mattjarvis123/rnaseq-splice -r main -profile docker -params-file params.yaml
+   ```
+
+   Use a release tag (for example `-r 1.0.0`) instead of `main` for reproducible runs once one is available.
+
+### Inputs
+
+The samplesheet is the [nf-core/rnaseq samplesheet](https://nf-co.re/rnaseq/3.27.0/docs/usage#samplesheet-input) plus a
+`condition` column:
+
+```csv title="samplesheet.csv"
 sample,fastq_1,fastq_2,strandedness,condition
 CTRL_REP1,ctrl1_R1.fastq.gz,ctrl1_R2.fastq.gz,auto,CTRL
+CTRL_REP2,ctrl2_R1.fastq.gz,ctrl2_R2.fastq.gz,auto,CTRL
+CTRL_REP3,ctrl3_R1.fastq.gz,ctrl3_R2.fastq.gz,auto,CTRL
 KD_REP1,kd1_R1.fastq.gz,kd1_R2.fastq.gz,auto,KD
+KD_REP2,kd2_R1.fastq.gz,kd2_R2.fastq.gz,auto,KD
+KD_REP3,kd3_R1.fastq.gz,kd3_R2.fastq.gz,auto,KD
 ```
 
-`contrasts.csv`:
+The contrasts sheet lists the comparisons, shared by rMATS and limma:
 
-```csv
+```csv title="contrasts.csv"
 contrast,treatment,control
 KD_vs_CTRL,KD,CTRL
 ```
 
-Results are written to `<outdir>/<aligner>/rmats/<contrast>/` and `<outdir>/<aligner>/limma/<contrast>/`
-(`*.limma.results.tsv`, mean-difference plot, voom-normalised log-CPM matrix, model and fitted `MArrayLM` object).
-Gene set results are in `<outdir>/<aligner>/gsea/<contrast>/` (`*.fgsea_de.tsv`, `*.fgsea_ranks.tsv`,
-`*.fgsea_splicing.tsv`, `*.fgsea_splicing_genes.tsv`). `--rmats` and `--limma` can be used independently; both use the
-same `--contrasts` sheet. Quick test: `nextflow run . -profile test_rmats,docker --outdir results`.
+`treatment` and `control` must match values in the `condition` column. Fold changes and ΔPSI are always
+treatment minus control. Gene set enrichment needs GMT files keyed by gene symbol, such as the
+[MSigDB](https://www.gsea-msigdb.org/gsea/msigdb) `*.symbols.gmt` files.
 
-### Keeping up with upstream
+## Parameters added by this pipeline
 
-The upstream repository is the `upstream` remote. Fork changes are kept in separate files where possible; the only
-edits to upstream files are small blocks in `workflows/rnaseq/main.nf`, `nextflow.config`, `nextflow_schema.json`,
-`assets/schema_input.json` and `modules.json`.
+| Parameter                                       | Default                | Description                                                                                                                                       |
+| ----------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--contrasts`                                   |                        | Contrasts sheet (`contrast,treatment,control`). Required with `--rmats` or `--limma`.                                                             |
+| `--rmats`                                       | `false`                | Run rMATS differential splicing. Needs a genome aligner (default `star_salmon`).                                                                  |
+| `--rmats_read_len`                              | `40`                   | Read length given to rMATS. **Set this to your read length.**                                                                                     |
+| `--rmats_min_reads`                             | `10`                   | Keep events with at least this many junction reads (inclusion + skipping) in every replicate of both conditions, then recompute the FDR. `0` = off. |
+| `--rmats_splice_diff_cutoff`                    | `0.0001`               | rMATS `--cstat`.                                                                                                                                  |
+| `--rmats_paired_stats`                          | `false`                | Paired model (PAIRADISE); pairs the n-th treatment and control samples in samplesheet order.                                                      |
+| `--rmats_novel_splice_site`                     | `false`                | Detect unannotated splice sites (with `--rmats_min_intron_len`, `--rmats_max_exon_len`).                                                          |
+| `--limma`                                       | `false`                | Run limma/voom differential expression.                                                                                                           |
+| `--limma_min_count`                             | `10`                   | Keep genes with at least this many counts in at least as many samples as the smallest condition.                                                 |
+| `--limma_robust`                                | `false`                | Robust empirical Bayes moderation.                                                                                                                |
+| `--gsea` / `--gsea_gmt`                         | `false` /              | Run fgsea on the limma and rMATS results, with these comma-separated GMT files.                                                                   |
+| `--gsea_fdr`                                    | `0.05`                 | Adjusted p-value cut-off for enriched gene sets.                                                                                                  |
+| `--gsea_rank_by`                                | `t`                    | Rank genes by the moderated `t` statistic or by `logFC`.                                                                                          |
+| `--gsea_splicing_fdr` / `--gsea_splicing_dpsi`  | `0.01` / `0`           | Event cut-offs used to build the spliced-gene lists.                                                                                              |
+| `--report_de_fdr` / `--report_de_lfc`           | `0.01` / `0`           | Cut-offs the report uses to call differentially expressed genes.                                                                                  |
+| `--report_splicing_fdr` / `--report_splicing_dpsi` | `0.01` / `0`        | Cut-offs the report uses to call differentially spliced events.                                                                                   |
+| `--report_kegg_maps` / `--report_kegg_cache`    | `true` /               | Draw KEGG maps for significant KEGG gene sets; reuse map files from this folder.                                                                  |
+| `--skip_report`                                 | `false`                | Skip the HTML report.                                                                                                                             |
+
+The pipeline never filters results by significance: every tested gene, event and gene set is written out, and the
+report cut-offs only affect what the report highlights. All nf-core/rnaseq parameters still apply; see the
+[nf-core/rnaseq 3.27.0 parameter documentation](https://nf-co.re/rnaseq/3.27.0/parameters). Full details are in
+[docs/splice_usage.md](docs/splice_usage.md).
+
+## Outputs
+
+In addition to the standard [nf-core/rnaseq outputs](https://nf-co.re/rnaseq/3.27.0/docs/output):
+
+```
+results/
+├── star_salmon/
+│   ├── rmats/<contrast>/            rMATS tables per event type (SE, MXE, A3SS, A5SS, RI)
+│   │   └── filtered/                coverage-filtered tables with recomputed FDR
+│   ├── limma/<contrast>/            limma/voom results, voom log-CPM, mean-difference plot, fitted model
+│   └── gsea/<contrast>/             fgsea results for expression and splicing
+└── report/
+    ├── rnaseq_splice_report.html    the results report
+    └── rnaseq_splice_report_tables/ full tables behind the report, and KEGG map images
+```
+
+See [docs/splice_output.md](docs/splice_output.md) for a description of every file and of the report pages.
+
+## Validation
+
+The pipeline was checked against a public positive control: ENCODE shRNA knockdowns of the splicing factor U2AF2 in
+K562 ([ENCSR904CJQ](https://www.encodeproject.org/experiments/ENCSR904CJQ/)) and HepG2
+([ENCSR426UUG](https://www.encodeproject.org/experiments/ENCSR426UUG/)) cells, compared with ENCODE's own processed
+differential expression and rMATS results ([Van Nostrand _et al._, 2020](https://doi.org/10.1038/s41586-020-2077-3)).
+In K562, log2 fold changes agreed with ENCODE's at r = 0.87 and ΔPSI values of matched splicing events at
+r = 0.96–0.98, with the pipeline detecting more significant genes and events than ENCODE's older tool versions.
+The [example report](https://mattjarvis123.github.io/rnaseq-splice/) shows the results of this run.
+
+## Running on a cluster or shared storage
+
+Use `-profile apptainer` (or `singularity`) on HPC systems, and set resource limits for your machine with `-c`.
+Example configs for a laptop and for a shared server or cluster are in [conf/examples/](conf/examples/), and
+[docs/splice_usage.md](docs/splice_usage.md#running-on-a-cluster-or-shared-storage) covers network storage, work folders
+and container caches.
+
+## Repository layout
+
+The pipeline follows the nf-core layout. Code added on top of nf-core/rnaseq lives in its own files where possible:
+
+| Addition                                   | Source                                                       | Location                                                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| rMATS subworkflow (prep, BAM lists, post)  | nf-core/rnasplice 2.0.0                                      | `subworkflows/local/rmats/`, `modules/nf-core/rmats/prep/`, `modules/local/rmats/post/`, `modules/local/createbamlist/` |
+| rMATS coverage filter                      | new                                                          | `modules/local/rmats/filter/`, `bin/rmats_filter.R`                                                         |
+| limma/voom subworkflow                     | nf-core/modules `custom/matrixfilter`, `limma/differential`  | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/`        |
+| Gene set enrichment                        | new (fgsea)                                                  | `subworkflows/local/gsea/`, `modules/local/fgsea/`, `bin/fgsea_de.R`, `bin/fgsea_splicing.R`                |
+| Results report                             | new (R Markdown, flexdashboard)                              | `modules/local/rnaseq_splice_report/`, `assets/report/`                                                     |
+| Process settings                           | ported from nf-core/rnasplice, and new                       | `conf/modules/{rmats,limma,gsea,report}.config`                                                             |
+| `condition` column and contrasts sheet     | nf-core/rnasplice                                            | `assets/schema_input.json`, `assets/schema_contrasts.json`                                                  |
+| Test profile                               | new                                                          | `conf/test_rmats.config`, `assets/test/`                                                                    |
+
+Edits to upstream files are limited to small blocks in `workflows/rnaseq/main.nf`, `nextflow.config`,
+`nextflow_schema.json`, `assets/schema_input.json` and `modules.json`, so new nf-core/rnaseq releases can be merged in:
 
 ```bash
+git remote add upstream https://github.com/nf-core/rnaseq.git   # once
 git fetch upstream --tags
-git merge 3.28.0   # or whichever release
+git merge 3.28.0   # the release to merge
 ```
-
----
-
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/nf-core-rnaseq_logo_dark.png">
-    <img alt="nf-core/rnaseq" src="docs/images/nf-core-rnaseq_logo_light.png">
-  </picture>
-</h1>
-
-[![Open in GitHub Codespaces](https://img.shields.io/badge/Open_In_GitHub_Codespaces-black?labelColor=grey&logo=github)](https://github.com/codespaces/new/nf-core/rnaseq)
-[![GitHub Actions CI Status](https://github.com/nf-core/rnaseq/actions/workflows/nf-test.yml/badge.svg)](https://github.com/nf-core/rnaseq/actions/workflows/nf-test.yml)
-[![GitHub Actions Linting Status](https://github.com/nf-core/rnaseq/actions/workflows/linting.yml/badge.svg)](https://github.com/nf-core/rnaseq/actions/workflows/linting.yml)[![AWS CI](https://img.shields.io/badge/CI%20tests-full%20size-FF9900?labelColor=000000&logo=Amazon%20AWS)](https://nf-co.re/rnaseq/results)[![Cite with Zenodo](http://img.shields.io/badge/DOI-10.5281/zenodo.1400710-1073c8?labelColor=000000)](https://doi.org/10.5281/zenodo.1400710)
-[![nf-test](https://img.shields.io/badge/unit_tests-nf--test-337ab7.svg)](https://www.nf-test.com)
-
-[![Nextflow](https://img.shields.io/badge/version-%E2%89%A525.10.4-green?style=flat&logo=nextflow&logoColor=white&color=%230DC09D&link=https%3A%2F%2Fnextflow.io)](https://www.nextflow.io/)
-[![nf-core template version](https://img.shields.io/badge/nf--core_template-4.1.0-green?style=flat&logo=nfcore&logoColor=white&color=%2324B064&link=https%3A%2F%2Fnf-co.re)](https://github.com/nf-core/tools/releases/tag/4.1.0)
-[![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
-[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
-[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
-[![Launch on Seqera Platform](https://img.shields.io/badge/Launch%20%F0%9F%9A%80-Seqera%20Platform-%234256e7)](https://cloud.seqera.io/launch?pipeline=https://github.com/nf-core/rnaseq)
-
-[![Get help on Slack](http://img.shields.io/badge/slack-nf--core%20%23rnaseq-4A154B?labelColor=000000&logo=slack)](https://nfcore.slack.com/channels/rnaseq)[![Follow on Bluesky](https://img.shields.io/badge/bluesky-%40nf__core-1185fe?labelColor=000000&logo=bluesky)](https://bsky.app/profile/nf-co.re)[![Follow on Mastodon](https://img.shields.io/badge/mastodon-nf__core-6364ff?labelColor=FFFFFF&logo=mastodon)](https://mstdn.science/@nf_core)[![Watch on YouTube](http://img.shields.io/badge/youtube-nf--core-FF0000?labelColor=000000&logo=youtube)](https://www.youtube.com/c/nf-core)
-
-## Introduction
-
-**nf-core/rnaseq** is a bioinformatics pipeline that can be used to analyse RNA sequencing data obtained from organisms with a reference genome and annotation. It takes a samplesheet with FASTQ files or pre-aligned BAM files as input, performs quality control (QC), trimming and (pseudo-)alignment, and produces a gene expression matrix and extensive QC report.
-
-![nf-core/rnaseq metro map](docs/images/nf-core-rnaseq_metro_map_animated.svg)
-
-> In case the image above is not loading, please have a look at the [static version](docs/images/nf-core-rnaseq_metro_map_light.png).
-
-1. Merge re-sequenced FastQ files ([`cat`](http://www.linfo.org/cat.html))
-2. Auto-infer strandedness by subsampling and pseudoalignment ([`fq`](https://github.com/stjude-rust-labs/fq), [`Salmon`](https://combine-lab.github.io/salmon/))
-3. Read QC ([`FastQC`](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/))
-4. UMI extraction ([`UMI-tools`](https://github.com/CGATOxford/UMI-tools))
-5. Adapter and quality trimming ([`Trim Galore!`](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/))
-6. Removal of genome contaminants ([`BBSplit`](http://seqanswers.com/forums/showthread.php?t=41288))
-7. Removal of ribosomal RNA ([`SortMeRNA`](https://github.com/biocore/sortmerna))
-8. Choice of multiple alignment and quantification routes (_For `STAR` the sentieon implementation can be chosen_):
-   1. [`STAR`](https://github.com/alexdobin/STAR) -> [`Salmon`](https://combine-lab.github.io/salmon/)
-   2. [`STAR`](https://github.com/alexdobin/STAR) -> [`RSEM`](https://github.com/deweylab/RSEM)
-   3. [`HiSAT2`](https://ccb.jhu.edu/software/hisat2/index.shtml) -> **NO QUANTIFICATION**
-9. Sort and index alignments ([`SAMtools`](https://sourceforge.net/projects/samtools/files/samtools/))
-10. UMI-based deduplication ([`UMI-tools`](https://github.com/CGATOxford/UMI-tools))
-11. Duplicate read marking ([`picard MarkDuplicates`](https://broadinstitute.github.io/picard/))
-12. Transcript assembly and quantification ([`StringTie`](https://ccb.jhu.edu/software/stringtie/))
-13. Create bigWig coverage files ([`BEDTools`](https://github.com/arq5x/bedtools2/), [`bedGraphToBigWig`](http://hgdownload.soe.ucsc.edu/admin/exe/))
-14. Extensive quality control:
-    1. [`RSeQC`](http://rseqc.sourceforge.net/)
-    2. [`Qualimap`](http://qualimap.bioinfo.cipf.es/)
-    3. [`dupRadar`](https://bioconductor.org/packages/release/bioc/html/dupRadar.html)
-    4. [`Preseq`](http://smithlabresearch.org/software/preseq/) (_disabled by default; enable with `--skip_preseq false`_)
-    5. [`DESeq2`](https://bioconductor.org/packages/release/bioc/html/DESeq2.html)
-    6. Or, _experimental_: [`RustQC`](https://github.com/seqeralabs/rustqc) as a single-pass alternative to RSeQC, Qualimap, dupRadar, Preseq, and SAMtools stats (enable with `--use_rustqc`; recommend trialling on pilot data first).
-    7. Contamination detection on selected screening reads (unaligned by default); _optional_
-       1. [`Kraken2`](https://ccb.jhu.edu/software/kraken2/) -> [`Bracken`](https://ccb.jhu.edu/software/bracken/)
-       2. [`Sylph`](https://sylph-docs.github.io/)
-15. Pseudoalignment and quantification ([`Salmon`](https://combine-lab.github.io/salmon/) or ['Kallisto'](https://pachterlab.github.io/kallisto/); _optional_)
-16. Present QC for raw read, alignment, gene biotype, sample similarity, and strand-specificity checks ([`MultiQC`](http://multiqc.info/), [`R`](https://www.r-project.org/))
-
-> [!NOTE]
-> The SRA download functionality has been removed from the pipeline (`>=3.2`) and ported to an independent workflow called [nf-core/fetchngs](https://nf-co.re/fetchngs). You can provide `--nf_core_pipeline rnaseq` when running nf-core/fetchngs to download and auto-create a samplesheet containing publicly available samples that can be accepted directly as input by this pipeline.
-
-> [!WARNING]
-> Quantification isn't performed if using `--aligner hisat2` due to the lack of an appropriate option to calculate accurate expression estimates from HISAT2 derived genomic alignments. However, you can use this route if you have a preference for the alignment, QC and other types of downstream analysis compatible with the output of HISAT2.
-
-## Usage
-
-> [!NOTE]
-> If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/get_started/environment_setup/overview) on how to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/get_started/run-your-first-pipeline) with `-profile test` before running the workflow on actual data.
-
-First, prepare a samplesheet with your input data that looks as follows:
-
-**samplesheet.csv**:
-
-```csv
-sample,fastq_1,fastq_2,strandedness,seq_platform
-CONTROL_REP1,AEG588A1_S1_L002_R1_001.fastq.gz,AEG588A1_S1_L002_R2_001.fastq.gz,auto,ILLUMINA
-CONTROL_REP1,AEG588A1_S1_L003_R1_001.fastq.gz,AEG588A1_S1_L003_R2_001.fastq.gz,auto,ILLUMINA
-CONTROL_REP1,AEG588A1_S1_L004_R1_001.fastq.gz,AEG588A1_S1_L004_R2_001.fastq.gz,auto,ILLUMINA
-```
-
-Each row represents a fastq file (single-end) or a pair of fastq files (paired end). Rows with the same sample identifier are considered technical replicates and merged automatically. The strandedness refers to the library preparation and will be automatically inferred if set to `auto`. The `seq_platform` column is optional; for a single platform across all samples, use the `--seq_platform` parameter instead.
-
-The pipeline supports a two-step reprocessing workflow using BAM files from previous runs. Run initially with `--save_align_intermeds` to generate a samplesheet with BAM paths, then reprocess using `--skip_alignment` for efficient downstream analysis without repeating expensive alignment steps. This feature is designed specifically for pipeline-generated BAMs.
-
-> [!WARNING]
-> Please provide pipeline parameters via the CLI or Nextflow `-params-file` option. Custom config files including those provided by the `-c` Nextflow option can be used to provide any configuration _**except for parameters**_; see [docs](https://nf-co.re/docs/running/run-pipelines#using-parameter-files).
-
-Now, you can run the pipeline using:
-
-```bash
-nextflow run nf-core/rnaseq \
-    --input <SAMPLESHEET> \
-    --outdir <OUTDIR> \
-    --gtf <GTF> \
-    --fasta <GENOME FASTA> \
-    -profile <docker/singularity/.../institute>
-```
-
-For more details and further functionality, please refer to the [usage documentation](https://nf-co.re/rnaseq/usage) and the [parameter documentation](https://nf-co.re/rnaseq/parameters).
-
-## Pipeline output
-
-To see the results of an example test run with a full size dataset refer to the [results](https://nf-co.re/rnaseq/results) tab on the nf-core website pipeline page.
-For more details about the output files and reports, please refer to the
-[output documentation](https://nf-co.re/rnaseq/output).
-
-This pipeline quantifies RNA-sequenced reads relative to genes/transcripts in the genome and normalizes the resulting data. It does not compare the samples statistically in order to assign significance in the form of FDR or P-values. For downstream analyses, the output files from this pipeline can be analysed directly in statistical environments like [R](https://www.r-project.org/), [Julia](https://julialang.org/) or via the [nf-core/differentialabundance](https://github.com/nf-core/differentialabundance/) pipeline.
-
-## Online videos
-
-A short talk about the history, current status and functionality on offer in this pipeline was given by Harshil Patel ([@drpatelh](https://github.com/drpatelh)) on [8th February 2022](https://nf-co.re/events/2022/bytesize-32-nf-core-rnaseq) as part of the nf-core/bytesize series.
-
-You can find numerous talks on the [nf-core events page](https://nf-co.re/events) from various topics including writing pipelines/modules in Nextflow DSL2, using nf-core tooling, running nf-core pipelines as well as more generic content like contributing to Github. Please check them out!
 
 ## Credits
 
-These scripts were originally written for use at the [National Genomics Infrastructure](https://ngisweden.scilifelab.se), part of [SciLifeLab](http://www.scilifelab.se/) in Stockholm, Sweden, by Phil Ewels ([@ewels](https://github.com/ewels)) and Rickard Hammarén ([@Hammarn](https://github.com/Hammarn)).
+rnaseq-splice is developed by [Matt Jarvis](https://github.com/mattjarvis123).
 
-The pipeline was re-written in Nextflow DSL2 by Harshil Patel ([@drpatelh](https://github.com/drpatelh)) from [Seqera Labs, Spain](https://seqera.io/), and is currently maintained by Jonathan Manning ([@pinin4fjords](https://github.com/pinin4fjords)) and the nf-core community.
-
-The pipeline workflow diagram was initially designed by Sarah Guinchard ([@G-Sarah](https://github.com/G-Sarah)) and James Fellows Yates ([@jfy133](https://github.com/jfy133)), further modifications where made by Harshil Patel ([@drpatelh](https://github.com/drpatelh)) and Maxime Garcia ([@maxulysse](https://github.com/maxulysse)).
-
-Many thanks to other who have helped out along the way too, including (but not limited to):
-
-- [Alex Peltzer](https://github.com/apeltzer)
-- [Colin Davenport](https://github.com/colindaven)
-- [Denis Moreno](https://github.com/Galithil)
-- [Edmund Miller](https://github.com/edmundmiller)
-- [Gregor Sturm](https://github.com/grst)
-- [Jacki Buros Novik](https://github.com/jburos)
-- [Lorena Pantano](https://github.com/lpantano)
-- [Matthias Zepper](https://github.com/MatthiasZepper)
-- [Maxime Garcia](https://github.com/maxulysse)
-- [Olga Botvinnik](https://github.com/olgabot)
-- [@orzechoj](https://github.com/orzechoj)
-- [Paolo Di Tommaso](https://github.com/pditommaso)
-- [Rob Syme](https://github.com/robsyme)
-
-## Contributions and Support
-
-If you would like to contribute to this pipeline, please see the [contributing guidelines](docs/CONTRIBUTING.md).
-
-For further information or help, don't hesitate to get in touch on the [Slack `#rnaseq` channel](https://nfcore.slack.com/channels/rnaseq) (you can join with [this invite](https://nf-co.re/join/slack)).
+It is built on [nf-core/rnaseq](https://github.com/nf-core/rnaseq) 3.27.0, originally written at the National Genomics
+Infrastructure (SciLifeLab) by Phil Ewels and Rickard Hammarén, re-written in Nextflow DSL2 by Harshil Patel, and
+maintained by Jonathan Manning and the nf-core community; and on the rMATS components of
+[nf-core/rnasplice](https://github.com/nf-core/rnasplice) 2.0.0, originally written by the bioinformatics team at Zifo
+RnD Solutions. Both are MIT-licensed.
 
 ## Citations
 
-If you use nf-core/rnaseq for your analysis, please cite it using the following doi: [10.5281/zenodo.1400710](https://doi.org/10.5281/zenodo.1400710)
+If you use rnaseq-splice, please cite the pipelines it is built on:
 
-An extensive list of references for the tools used by the pipeline can be found in the [`CITATIONS.md`](CITATIONS.md) file.
-
-You can cite the `nf-core` publication as follows:
-
-> **The nf-core framework for community-curated bioinformatics pipelines.**
+> **nf-core/rnaseq.** doi: [10.5281/zenodo.1400710](https://doi.org/10.5281/zenodo.1400710)
 >
-> Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
+> **nf-core/rnasplice.** doi: [10.5281/zenodo.8424632](https://doi.org/10.5281/zenodo.8424632)
 >
-> _Nat Biotechnol._ 2020 Feb 13. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x).
+> **The nf-core framework.** Ewels PA, Peltzer A, Fillinger S, _et al._ _Nat Biotechnol._ 2020;38(3):276-278. doi: [10.1038/s41587-020-0439-x](https://dx.doi.org/10.1038/s41587-020-0439-x)
+
+and the tools it uses, listed in [CITATIONS.md](CITATIONS.md).
+
+## License
+
+[MIT](LICENSE). The upstream nf-core copyright notice is kept alongside the copyright for the additions.

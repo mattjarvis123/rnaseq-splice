@@ -1,5 +1,15 @@
 # rnaseq-splice: Citations
 
+## Pipelines rnaseq-splice is built on
+
+- [nf-core/rnaseq](https://github.com/nf-core/rnaseq) 3.27.0
+
+  > nf-core/rnaseq. doi: 10.5281/zenodo.1400710.
+
+- [nf-core/rnasplice](https://github.com/nf-core/rnasplice) 2.0.0 (rMATS components)
+
+  > nf-core/rnasplice. doi: 10.5281/zenodo.8424632.
+
 ## [nf-core](https://pubmed.ncbi.nlm.nih.gov/32055031/)
 
 > Ewels PA, Peltzer A, Fillinger S, Patel H, Alneberg J, Wilm A, Garcia MU, Di Tommaso P, Nahnsen S. The nf-core framework for community-curated bioinformatics pipelines. Nat Biotechnol. 2020 Mar;38(3):276-278. doi: 10.1038/s41587-020-0439-x. PubMed PMID: 32055031.
@@ -80,6 +90,12 @@
 
   > Deng ZL, Munch PC, Mreches R, McHardy AC. Rapid and accurate identification of ribosomal RNA sequences via deep learning. Nucleic Acids Res. 2022 Jun 10;50(10):e60. doi: 10.1093/nar/gkac112. PubMed PMID: 35188571; PubMed Central PMCID: PMC9177968.
 
+- [rMATS](https://pubmed.ncbi.nlm.nih.gov/25480548/) (rnaseq-splice differential splicing)
+
+  > Shen S, Park JW, Lu ZX, Lin L, Henry MD, Wu YN, Zhou Q, Xing Y. rMATS: robust and flexible detection of differential alternative splicing from replicate RNA-Seq data. Proc Natl Acad Sci U S A. 2014 Dec 23;111(51):E5593-601. doi: 10.1073/pnas.1419161111. PubMed PMID: 25480548.
+
+  > Wang Y, Xie Z, Kutschera E, Adams JI, Kadash-Edmondson KE, Xing Y. rMATS-turbo: an efficient and flexible computational tool for alternative splicing analysis of large-scale RNA-seq data. Nat Protoc. 2024;19(4):1083-1104. doi: 10.1038/s41596-023-00944-2.
+
 - [RSEM](https://pubmed.ncbi.nlm.nih.gov/21816040/)
 
   > Li B, Dewey CN. RSEM: accurate transcript quantification from RNA-Seq data with or without a reference genome BMC Bioinformatics. 2011 Aug 4;12:323. doi: 10.1186/1471-2105-12-323. PubMed PMID: 21816040; PubMed Central PMCID: PMC3163565.
@@ -152,13 +168,29 @@
 
   > Sayols S, Scherzinger D, Klein H. dupRadar: a Bioconductor package for the assessment of PCR artifacts in RNA-Seq data BMC Bioinformatics. 2016 Oct 21;17(1):428. doi: 10.1186/s12859-016-1276-2. PubMed PMID: 27769170; PubMed Central PMCID: PMC5073875.
 
+- [edgeR](https://pubmed.ncbi.nlm.nih.gov/20196867/) (TMM normalisation for limma/voom)
+
+  > Robinson MD, Oshlack A. A scaling normalization method for differential expression analysis of RNA-seq data. Genome Biol. 2010;11(3):R25. doi: 10.1186/gb-2010-11-3-r25. PubMed PMID: 20196867.
+
+- [flexdashboard](https://CRAN.R-project.org/package=flexdashboard) and [rmarkdown](https://CRAN.R-project.org/package=rmarkdown) (rnaseq-splice results report)
+
 - [ggplot2](https://cran.r-project.org/web/packages/ggplot2/index.html)
 
   > H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
 
+- [limma](https://pubmed.ncbi.nlm.nih.gov/25605792/) and [voom](https://pubmed.ncbi.nlm.nih.gov/24485249/) (rnaseq-splice differential expression)
+
+  > Ritchie ME, Phipson B, Wu D, Hu Y, Law CW, Shi W, Smyth GK. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Res. 2015 Apr 20;43(7):e47. doi: 10.1093/nar/gkv007. PubMed PMID: 25605792.
+
+  > Law CW, Chen Y, Shi W, Smyth GK. voom: precision weights unlock linear model analysis tools for RNA-seq read counts. Genome Biol. 2014 Feb 3;15(2):R29. doi: 10.1186/gb-2014-15-2-r29. PubMed PMID: 24485249.
+
 - [optparse](https://CRAN.R-project.org/package=optparse)
 
   > Trevor L Davis (2018). optparse: Command Line Option Parser.
+
+- [PAIRADISE](https://doi.org/10.1016/j.ajhg.2020.07.005) (rMATS paired statistics, `--rmats_paired_stats`)
+
+  > Demirdjian L, Xu Y, Bahrami-Samani E, Pan Y, Stein S, Xie Z, Park E, Wu YN, Xing Y. Detecting allele-specific alternative splicing from population-scale RNA-seq data. Am J Hum Genet. 2020;107(3):461-472. doi: 10.1016/j.ajhg.2020.07.005.
 
 - [pathview](https://pubmed.ncbi.nlm.nih.gov/23740750/) (rnaseq-splice report pathway maps)
 
@@ -178,6 +210,18 @@
 
 - [Tximeta](https://pubmed.ncbi.nlm.nih.gov/32097405/)
   > Love MI, Soneson C, Hickey PF, Johnson LK, Pierce NT, Shepherd L, Morgan M, Patro R. Tximeta: Reference sequence checksums for provenance identification in RNA-seq PLoS Comput Biol. 2020 Feb 25;16(2):e1007664. doi: 10.1371/journal.pcbi.1007664. eCollection 2020 Feb. PubMed PMID: 32097405; PubMed Central PMCID: PMC7059966.
+
+## Gene sets and validation data
+
+- [MSigDB](https://www.gsea-msigdb.org/gsea/msigdb) gene sets and [GSEA](https://pubmed.ncbi.nlm.nih.gov/16199517/) (gene set enrichment, when MSigDB GMT files are used)
+
+  > Subramanian A, Tamayo P, Mootha VK, Mukherjee S, Ebert BL, Gillette MA, Paulovich A, Pomeroy SL, Golub TR, Lander ES, Mesirov JP. Gene set enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. Proc Natl Acad Sci U S A. 2005 Oct 25;102(43):15545-50. doi: 10.1073/pnas.0506580102. PubMed PMID: 16199517.
+
+  > Liberzon A, Birger C, Thorvaldsdóttir H, Ghandi M, Mesirov JP, Tamayo P. The Molecular Signatures Database (MSigDB) hallmark gene set collection. Cell Syst. 2015 Dec 23;1(6):417-425. doi: 10.1016/j.cels.2015.12.004. PubMed PMID: 26771021.
+
+- [ENCODE RNA-binding protein knockdowns](https://pubmed.ncbi.nlm.nih.gov/32728246/) (U2AF2 positive control used to validate the pipeline)
+
+  > Van Nostrand EL, Freese P, Pratt GA, _et al._ A large-scale binding and functional map of human RNA-binding proteins. Nature. 2020 Jul;583(7818):711-719. doi: 10.1038/s41586-020-2077-3. PubMed PMID: 32728246.
 
 ## Software packaging/containerisation tools
 

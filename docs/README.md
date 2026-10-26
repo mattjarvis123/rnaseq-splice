@@ -1,10 +1,12 @@
-# nf-core/rnaseq: Documentation
+# rnaseq-splice: Documentation
 
-The nf-core/rnaseq documentation is split into the following pages:
+- [Usage: rnaseq-splice additions](splice_usage.md)
+  - Samplesheet and contrasts sheet, differential splicing, differential expression, gene set enrichment, the results
+    report, and running on a cluster or shared storage.
+- [Output: rnaseq-splice additions](splice_output.md)
+  - rMATS, limma/voom and fgsea output files, and the pages of the results report.
+- [Usage: nf-core/rnaseq](usage.md) and [Output: nf-core/rnaseq](output.md)
+  - The upstream nf-core/rnaseq 3.27.0 documentation for everything the pipeline inherits: read QC, trimming,
+    alignment, quantification, quality control and reference genomes.
 
-- [Usage](usage.md)
-  - An overview of how the pipeline works, how to run it and a description of all of the different command-line flags.
-- [Output](output.md)
-  - An overview of the different results produced by the pipeline and how to interpret them.
-
-You can find a lot more documentation about installing, configuring and running nf-core pipelines on the website: [https://nf-co.re](https://nf-co.re)
+More about installing, configuring and running nf-core-style pipelines: [https://nf-co.re/docs](https://nf-co.re/docs).

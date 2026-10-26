@@ -1,7 +1,38 @@
-# nf-core/rnaseq: Changelog
+# rnaseq-splice: Changelog
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## rnaseq-splice [1.0.0dev] - unreleased
+
+First version of rnaseq-splice, built on nf-core/rnaseq 3.27.0. All additions are opt-in; without them the pipeline
+runs as nf-core/rnaseq 3.27.0.
+
+### Added
+
+- Differential splicing with rMATS 4.3.0 (`--rmats`), ported from nf-core/rnasplice 2.0.0: per-sample prep on the final
+  genome BAMs, per-contrast statistics, optional paired model (PAIRADISE) and novel splice sites.
+- Read-coverage filter for rMATS events with FDR recalculation (`--rmats_min_reads`, default 10).
+- Differential expression with limma/voom (`--limma`), using the nf-core `custom/matrixfilter` and
+  `limma/differential` modules on length-scaled gene counts.
+- Optional `condition` samplesheet column and a contrasts sheet (`--contrasts`) shared by rMATS and limma.
+- Gene set enrichment with fgsea 1.32.2 (`--gsea`, `--gsea_gmt`): preranked GSEA of the limma results and
+  over-representation analysis of differentially spliced genes.
+- HTML results report as the final step (`RNASEQ_SPLICE_REPORT`, `--skip_report` to turn off), with QC, sample
+  structure, DE and splicing pages, cross-contrast views, gene set results, KEGG pathway maps and a gene lookup.
+- `test_rmats` profile; documentation in `docs/splice_usage.md` and `docs/splice_output.md`; example configs in
+  `conf/examples/`.
+
+### Changed
+
+- Pipeline name, version, schema ids, startup message, MultiQC texts and e-mail templates now refer to rnaseq-splice,
+  crediting nf-core/rnaseq 3.27.0 and nf-core/rnasplice 2.0.0.
+- Command-line parameters are type-cast by nf-schema before validation, so values such as `--rmats_read_len 100` pass
+  validation under Nextflow's strict syntax.
+
+## Upstream nf-core/rnaseq changelog
+
+The entries below are the nf-core/rnaseq changelog up to 3.27.0, the release rnaseq-splice is built on.
 
 ## [[3.27.0](https://github.com/nf-core/rnaseq/releases/tag/3.27.0)] - 2026-09-23
 
