@@ -1,0 +1,208 @@
+
+Across contrasts
+=====================================
+
+```{r across-data}
+# Contrasts in contrasts.csv order (list them by increasing dose for a dose-response view)
+cts_de <- intersect(ct_levels, names(de))
+cts_ds <- intersect(ct_levels, names(ds)[vapply(ds, nrow, integer(1)) > 0])
+top_n  <- as.integer(params$heatmap_top_n)
+
+# Genes: logFC and FDR per contrast (wide), for genes tested in every contrast
+de_long <- bind_rows(lapply(cts_de, function(ct)
+    de[[ct]] |> transmute(gene_id, gene_name, contrast = ct, logFC, FDR, sig = direction != "NS")))
+de_wide <- if (nrow(de_long)) {
+    de_long |> group_by(gene_id) |> filter(n() == length(cts_de)) |>
+        summarise(gene_name = first(gene_name), n_sig = sum(sig), min_FDR = min(FDR),
+                  max_abs_logFC = max(abs(logFC)), .groups = "drop") |>
+        filter(n_sig > 0) |> arrange(min_FDR, desc(max_abs_logFC))
+} else NULL
+
+# Events matched across contrasts by type and coordinates
+ds_long <- bind_rows(lapply(cts_ds, function(ct)
+    ds[[ct]] |> filter(!is.na(FDR)) |>
+        transmute(event_key, event_type, gene_id, gene_name, location, contrast = ct, dPSI, FDR,
+                  sig = direction != "NS")))
+ds_wide <- if (nrow(ds_long)) {
+    ds_long |> group_by(event_key) |>
+        summarise(event_type = first(event_type), gene_id = first(gene_id), gene_name = first(gene_name),
+                  location = first(location), n_tested = n(), n_sig = sum(sig), min_FDR = min(FDR),
+                  max_abs_dPSI = max(abs(dPSI)), .groups = "drop") |>
+        filter(n_sig > 0) |> arrange(min_FDR, desc(max_abs_dPSI))
+} else NULL
+
+# Heatmap of one value per row x contrast; significant cells are marked with a dot
+across_heatmap <- function(long, rows, row_col, value, label, zlim, value_name, fmt) {
+    m <- long |> filter(.data[[row_col]] %in% rows) |>
+        select(all_of(c(row_col, "contrast", value, "FDR", "sig")))
+    val <- tapply(m[[value]], list(m[[row_col]], m$contrast), function(v) v[1])[rows, , drop = FALSE]
+    fdr <- tapply(m$FDR, list(m[[row_col]], m$contrast), function(v) v[1])[rows, , drop = FALSE]
+    sg  <- tapply(m$sig, list(m[[row_col]], m$contrast), function(v) v[1])[rows, , drop = FALSE]
+    cts <- intersect(ct_levels, colnames(val))
+    val <- val[, cts, drop = FALSE]; fdr <- fdr[, cts, drop = FALSE]; sg <- sg[, cts, drop = FALSE]
+    # Rows clustered by Euclidean distance between their value profiles across contrasts (complete
+    # linkage; untested cells count as 0); dendrogram on the left, row labels on the right
+    filled <- val; filled[is.na(filled)] <- 0
+    hc  <- if (nrow(val) > 2) hclust(dist(filled, method = "euclidean"), method = "complete") else NULL
+    ord <- if (is.null(hc)) seq_len(nrow(val)) else hc$order
+    val <- val[ord, , drop = FALSE]; fdr <- fdr[ord, , drop = FALSE]; sg <- sg[ord, , drop = FALSE]
+    ylab <- make.unique(label[ord])
+    ypos <- seq_len(nrow(val))                       # row i of the heatmap sits at y = i (top to bottom)
+    txt <- matrix(paste0("<b>", rep(ylab, ncol(val)), "</b><br>", rep(cts, each = nrow(val)), "<br>", value_name, " ",
+                         ifelse(is.na(val), "not tested", sprintf(fmt, val)), "<br>FDR ",
+                         ifelse(is.na(fdr), "NA", fmt_p(fdr)), ifelse(!is.na(sg) & sg, " (significant)", "")),
+                  nrow(val))
+    pts <- which(!is.na(sg) & sg, arr.ind = TRUE)
+    yaxis <- list(title = "", autorange = "reversed", range = c(nrow(val) + 0.5, 0.5), showgrid = FALSE, zeroline = FALSE)
+    hm <- plot_ly() |>
+        # grey layer underneath: shows through cells that were not tested in a contrast
+        add_heatmap(x = cts, y = ypos, z = matrix(0, nrow(val), ncol(val)), showscale = FALSE, hoverinfo = "skip",
+                    colorscale = list(c(0, "#D9D9D9"), c(1, "#D9D9D9"))) |>
+        add_heatmap(x = cts, y = ypos, z = pmax(pmin(val, zlim), -zlim), text = txt,
+                    colorscale = list(c(0, col_down), c(0.5, "white"), c(1, col_up)),
+                    zmin = -zlim, zmax = zlim, colorbar = list(title = list(text = value_name, side = "top"), orientation = "h", x = 0.5, xanchor = "center",
+                                    y = 1.02, yanchor = "bottom", len = 0.5, thickness = 12),
+                    hovertemplate = "%{text}<extra></extra>")
+    if (nrow(pts)) {
+        hm <- add_trace(hm, x = cts[pts[, 2]], y = ypos[pts[, 1]], type = "scatter", mode = "markers",
+                        marker = list(size = 4, color = "#333333"), hoverinfo = "skip", showlegend = FALSE)
+    }
+    hm <- hm |> layout(xaxis = list(title = "", type = "category", categoryorder = "array", categoryarray = cts),
+                       yaxis = c(yaxis, list(side = "right", tickmode = "array", tickvals = ypos, ticktext = ylab,
+                                             tickfont = list(size = 10))))
+    if (is.null(hc)) return(hm |> layout(margin = list(b = 120)))
+    # dendrogram segments from the hclust merges: leaves at height 0, root on the left
+    leaf_y <- integer(length(ord)); leaf_y[ord] <- ypos
+    node_y <- numeric(nrow(hc$merge)); sx <- sy <- c()
+    child <- function(k) if (k < 0) c(leaf_y[-k], 0) else c(node_y[k], hc$height[k])
+    for (i in seq_len(nrow(hc$merge))) {
+        a <- child(hc$merge[i, 1]); b <- child(hc$merge[i, 2]); h <- hc$height[i]
+        node_y[i] <- (a[1] + b[1]) / 2
+        sx <- c(sx, a[2], h, h, b[2], NA); sy <- c(sy, a[1], a[1], b[1], b[1], NA)
+    }
+    dg <- plot_ly(x = sx, y = sy, type = "scatter", mode = "lines", line = list(color = "#555555", width = 1),
+                  hoverinfo = "skip", showlegend = FALSE) |>
+        layout(xaxis = list(title = "Euclidean distance", autorange = "reversed", showgrid = FALSE, zeroline = FALSE,
+                            titlefont = list(size = 10), tickfont = list(size = 9)),
+               yaxis = c(yaxis, list(showticklabels = FALSE)))
+    subplot(dg, hm, widths = c(0.18, 0.82), shareY = FALSE, titleX = TRUE, margin = 0.005) |>
+        layout(margin = list(b = 120, r = 10))
+}
+n_de_rows <- if (is.null(de_wide)) 0 else min(top_n, nrow(de_wide))
+n_ds_rows <- if (is.null(ds_wide)) 0 else min(top_n, nrow(ds_wide))
+```
+
+Row {data-height=470}
+-------------------------------------
+
+### DE genes per contrast (`r de_rule`)
+
+```{r}
+if (!length(cts_de)) {
+    message_box("No limma results were found.")
+} else {
+    cnt <- de_counts[match(cts_de, de_counts$contrast), ]
+    updown_barplot(cnt$contrast, cnt$Up, cnt$Down)
+}
+```
+
+### Differentially spliced events per contrast (`r ds_rule`)
+
+```{r}
+if (!length(cts_ds)) {
+    message_box("No rMATS results were found.")
+} else {
+    cnt <- ds_counts |> group_by(contrast) |>
+        summarise(hi = sum(`Higher inclusion`), lo = sum(`Lower inclusion`), .groups = "drop")
+    cnt <- cnt[match(cts_ds, cnt$contrast), ]
+    updown_barplot(cnt$contrast, cnt$hi, cnt$lo, up_name = "Higher inclusion", down_name = "Lower inclusion",
+                   ylab = "Number of DS events", legend_title = "Inclusion in treatment", noun = "events")
+}
+```
+
+### Genes significant in how many contrasts
+
+```{r}
+if (is.null(de_wide) && is.null(ds_wide)) {
+    message_box("No significant genes or events.")
+} else {
+    ns <- bind_rows(
+        if (!is.null(de_wide)) data.frame(what = "DE genes", n = de_wide$n_sig),
+        if (!is.null(ds_wide)) ds_wide |> group_by(gene_id) |> summarise(n = max(n_sig), .groups = "drop") |>
+            transmute(what = "DS genes (any event)", n)) |>
+        count(what, n) |> mutate(n = factor(n, levels = seq_along(ct_levels)))
+    plot_ly(ns, x = ~n, y = ~nn, color = ~what, colors = c(`DE genes` = "#3182BD", `DS genes (any event)` = "#1B9E77"),
+            type = "bar", hovertemplate = "significant in %{x} contrast(s)<br>%{y:,} genes<extra>%{fullData.name}</extra>") |>
+        layout(barmode = "group", xaxis = list(title = "Number of contrasts significant"),
+               yaxis = list(title = "Genes"), legend = list(orientation = "h", y = 1.1))
+}
+```
+
+Row {data-height=`r max(350, 15 * n_de_rows + 200)`}
+-------------------------------------
+
+### Top `r n_de_rows` DE genes across contrasts: log2 fold change (dot = significant; genes significant in ≥1 contrast, lowest FDR first; rows clustered by Euclidean distance)
+
+```{r}
+if (!n_de_rows) {
+    message_box("No gene is differentially expressed in any contrast.")
+} else {
+    rows <- head(de_wide$gene_id, top_n)
+    lab  <- de_wide$gene_name[match(rows, de_wide$gene_id)]
+    zl   <- max(1, ceiling(quantile(abs(de_long$logFC[de_long$gene_id %in% rows]), 0.98, na.rm = TRUE)))
+    across_heatmap(de_long, rows, "gene_id", "logFC", lab, zl, "log2FC", "%.2f")
+}
+```
+
+### Top `r n_ds_rows` splicing events across contrasts: ΔPSI (dot = significant; grey = not tested; rows clustered by Euclidean distance)
+
+```{r}
+if (!n_ds_rows) {
+    message_box("No splicing event is significant in any contrast.")
+} else {
+    rows <- head(ds_wide$event_key, top_n)
+    ev   <- ds_wide[match(rows, ds_wide$event_key), ]
+    across_heatmap(ds_long, rows, "event_key", "dPSI", event_label(ev), 0.5, "ΔPSI", "%.3f")
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Genes differentially expressed in at least one contrast: log2FC and FDR per contrast
+
+```{r}
+if (is.null(de_wide) || !nrow(de_wide)) {
+    message_box("No gene is differentially expressed in any contrast.")
+} else {
+    w <- de_long |> filter(gene_id %in% de_wide$gene_id) |> select(gene_id, contrast, logFC, FDR) |>
+        pivot_wider(names_from = contrast, values_from = c(logFC, FDR), names_glue = "{.value}_{contrast}")
+    tab <- de_wide |> select(gene_id, gene_name, n_sig_contrasts = n_sig, min_FDR) |> left_join(w, by = "gene_id")
+    tab <- tab[, c("gene_id", "gene_name", "n_sig_contrasts", "min_FDR",
+                   paste0("logFC_", cts_de), paste0("FDR_", cts_de))]
+    capped_table(tab, "across_contrasts_DE_genes.tsv", numeric_cols = paste0("logFC_", cts_de),
+                 sci_cols = c("min_FDR", paste0("FDR_", cts_de)))
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Splicing events significant in at least one contrast: ΔPSI and FDR per contrast
+
+```{r}
+if (is.null(ds_wide) || !nrow(ds_wide)) {
+    message_box("No splicing event is significant in any contrast.")
+} else {
+    w <- ds_long |> filter(event_key %in% ds_wide$event_key) |> select(event_key, contrast, dPSI, FDR) |>
+        pivot_wider(names_from = contrast, values_from = c(dPSI, FDR), names_glue = "{.value}_{contrast}")
+    tab <- ds_wide |> select(event_key, event_type, gene_id, gene_name, location, n_sig_contrasts = n_sig,
+                             n_tested_contrasts = n_tested, min_FDR) |>
+        left_join(w, by = "event_key") |> select(-event_key)
+    keep <- c(paste0("dPSI_", cts_ds), paste0("FDR_", cts_ds))
+    tab  <- tab[, c("event_type", "gene_id", "gene_name", "location", "n_sig_contrasts", "n_tested_contrasts",
+                    "min_FDR", keep[keep %in% colnames(tab)])]
+    capped_table(tab, "across_contrasts_DS_events.tsv", numeric_cols = intersect(paste0("dPSI_", cts_ds), colnames(tab)),
+                 sci_cols = intersect(c("min_FDR", paste0("FDR_", cts_ds)), colnames(tab)))
+}
+```

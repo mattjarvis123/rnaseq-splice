@@ -62,6 +62,7 @@ include { FASTQ_QC_TRIM_FILTER_SETSTRANDEDNESS              } from '../../subwor
 include { RMATS                                             } from '../../subworkflows/local/rmats'  // ported from nf-core/rnasplice 2.0.0
 include { DIFFERENTIAL_LIMMA                                } from '../../subworkflows/local/differential_limma'
 include { GSEA                                              } from '../../subworkflows/local/gsea'
+include { RNASEQ_SPLICE_REPORT                              } from '../../modules/local/rnaseq_splice_report'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -954,6 +955,58 @@ workflow RNASEQ {
             params.skip_quantification_merge
         )
         ch_multiqc_report = MULTIQC_RNASEQ.out.report
+    }
+
+    //
+    // MODULE: results report (rnaseq-splice addition)
+    //
+    // Final step: renders assets/report/render_report.R on the limma/voom, rMATS, fgsea and
+    // MultiQC outputs of this run. Each input becomes an empty list when its step did not run.
+    //
+    if ((run_limma || run_rmats) && !params.skip_report.toString().toBoolean()) {
+        def run_gsea = params.gsea.toString().toBoolean()
+        ch_report_limma = run_limma
+            ? DIFFERENTIAL_LIMMA.out.results.map { _meta, tsv -> tsv }
+                .mix(DIFFERENTIAL_LIMMA.out.normalised_counts.map { _meta, tsv -> tsv })
+                .toList()
+            : channel.value([])
+        // One rMATS output folder per contrast: the coverage-filtered tables sit in its filtered/
+        // subfolder, which the report prefers over rMATS's own tables
+        def rmats_filtered = params.rmats_min_reads.toString().toInteger() > 0
+        ch_report_rmats = run_rmats
+            ? RMATS.out.mats_filtered.map { meta, files ->
+                def first = files instanceof List ? files[0] : files
+                [ meta.id, rmats_filtered ? first.parent.parent : first.parent ]
+            }.toList()
+            : channel.value([])
+        ch_report_gsea = run_gsea
+            ? GSEA.out.de_results.mix(GSEA.out.de_ranks, GSEA.out.splicing_results, GSEA.out.splicing_genes)
+                .map { _meta, tsv -> tsv }
+                .toList()
+            : channel.value([])
+        ch_report_multiqc = params.skip_multiqc ? channel.value([]) : MULTIQC_RNASEQ.out.data.toList()
+        def report_params = [
+            report_de_fdr: params.report_de_fdr, report_de_lfc: params.report_de_lfc,
+            report_splicing_fdr: params.report_splicing_fdr, report_splicing_dpsi: params.report_splicing_dpsi,
+            gsea_fdr: params.gsea_fdr, gsea_min_size: params.gsea_min_size, gsea_max_size: params.gsea_max_size,
+            gsea_rank_by: params.gsea_rank_by, gsea_splicing_fdr: params.gsea_splicing_fdr,
+            gsea_splicing_dpsi: params.gsea_splicing_dpsi, rmats_min_reads: params.rmats_min_reads,
+            limma_min_count: params.limma_min_count
+        ]
+        RNASEQ_SPLICE_REPORT (
+            file("${projectDir}/assets/report", checkIfExists: true),
+            file(params.input, checkIfExists: true),
+            file(params.contrasts, checkIfExists: true),
+            run_limma ? ch_limma_counts.map { _meta, tsv -> tsv }.first() : channel.value([]),
+            ch_report_limma,
+            ch_report_rmats.map { pairs -> pairs.collect { pair -> pair[0] } },
+            ch_report_rmats.map { pairs -> pairs.collect { pair -> pair[1] } },
+            ch_report_gsea,
+            ch_report_multiqc,
+            ch_collated_versions,
+            report_params,
+            params.aligner
+        )
     }
 
     //

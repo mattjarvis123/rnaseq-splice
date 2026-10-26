@@ -1194,6 +1194,41 @@
                     "minimum": 0,
                     "maximum": 1,
                     "description": "Report: |dPSI| above which a splicing event is significant (0 = no dPSI cut-off)."
+                },
+                "skip_report": {
+                    "type": "boolean",
+                    "description": "Skip the results report (rendered as the final step when --limma and/or --rmats are on).",
+                    "fa_icon": "fas fa-fast-forward"
+                },
+                "report_name": {
+                    "type": "string",
+                    "default": "rnaseq_splice_report",
+                    "description": "File name (without .html) of the report in <outdir>/report/."
+                },
+                "report_title": {
+                    "type": "string",
+                    "default": "rnaseq-splice report",
+                    "description": "Title shown at the top of the report."
+                },
+                "report_project": {
+                    "type": "string",
+                    "description": "Project name shown on the report's overview page."
+                },
+                "report_kegg_maps": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Draw KEGG pathway maps for significant KEGG legacy gene sets (needs --gsea with an MSigDB KEGG legacy GMT). Map files are downloaded from rest.kegg.jp, which is free for academic use only."
+                },
+                "report_kegg_cache": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Folder of cached KEGG map files (KGML and PNG), reused across runs; missing maps are downloaded into it. Without it, maps are downloaded on every run."
+                },
+                "report_table_max_rows": {
+                    "type": "integer",
+                    "default": 5000,
+                    "minimum": 1,
+                    "description": "Maximum rows shown in each table in the report; the full tables are written to <report_name>_tables/."
                 }
             }
         }

@@ -1,0 +1,90 @@
+
+`r ct` {data-navmenu="Gene sets"}
+=====================================
+
+```{r}
+gde <- gsea_de[[ct]]
+gds <- gsea_ds[[ct]]
+top_n_sets <- 15
+# Horizontal bar chart of gene sets in the theme_bw style of updown_barplot
+hbar <- function(df, x, xlab) {
+    df$label <- short_name(df$pathway)
+    plot_ly(df, x = x, y = ~factor(label, levels = label), type = "bar", orientation = "h",
+            marker = list(color = ifelse(x > 0, col_up, col_down)),
+            hovertext = ~hover, hoverinfo = "text") |>
+        layout(plot_bgcolor = "white", showlegend = FALSE, bargap = 0.15,
+               xaxis = list(title = xlab, showline = TRUE, mirror = TRUE, linecolor = "#333333",
+                            gridcolor = "#EBEBEB", zeroline = TRUE, zerolinecolor = "#333333", ticks = "outside"),
+               yaxis = list(title = "", showline = TRUE, mirror = TRUE, linecolor = "#333333",
+                            gridcolor = "#EBEBEB", automargin = TRUE, tickfont = list(size = 10)))
+}
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Top `r top_n_sets` Up and Down gene sets by NES (preranked GSEA, FDR < `r fdr_gs`)
+
+```{r}
+if (is.null(gde) || !any(gde$direction != "NS")) {
+    message_box(paste0("No gene sets pass FDR < ", fdr_gs, " for this contrast."))
+} else {
+    top <- bind_rows(gde |> filter(direction == "Up") |> arrange(desc(NES)) |> head(top_n_sets),
+                     gde |> filter(direction == "Down") |> arrange(NES) |> head(top_n_sets)) |>
+        arrange(NES) |>
+        mutate(hover = paste0("<b>", pathway, "</b><br>", collection, "<br>NES ", sprintf("%.2f", NES),
+                              "<br>FDR ", signif(padj, 3), "<br>", size, " genes, leading edge ", leading_edge_n))
+    hbar(top, top$NES, "Normalised enrichment score (NES)")
+}
+```
+
+### Top `r top_n_sets` gene sets over-represented among spliced genes (FDR < `r fdr_gs`)
+
+```{r}
+if (is.null(gds) || !any(gds$significant)) {
+    message_box(paste0("No gene sets pass FDR < ", fdr_gs, " for this contrast."))
+} else {
+    # Higher-inclusion genes to the right (orange), lower-inclusion genes to the left (blue)
+    top <- bind_rows(gds |> filter(significant, gene_list == "Higher inclusion") |> arrange(padj) |> head(top_n_sets),
+                     gds |> filter(significant, gene_list == "Lower inclusion") |> arrange(padj) |> head(top_n_sets)) |>
+        mutate(score = ifelse(gene_list == "Higher inclusion", 1, -1) * -log10(pmax(padj, 1e-300)),
+               pathway = paste0(pathway, ifelse(gene_list == "Higher inclusion", "", " ")),  # same set in both lists
+               hover = paste0("<b>", trimws(pathway), "</b><br>", gene_list, " genes<br>", collection,
+                              "<br>", overlap, " of ", size, " genes (fold enrichment ", sprintf("%.2f", fold_enrichment),
+                              ")<br>FDR ", signif(padj, 3))) |>
+        arrange(score)
+    hbar(top, top$score, "-log10 FDR  (← lower | higher inclusion →)")
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Gene sets regulated by expression (FDR < `r fdr_gs`)
+
+```{r}
+if (is.null(gde) || !any(gde$direction != "NS")) {
+    message_box("No gene sets pass the cut-off.")
+} else {
+    tab <- gde |> filter(direction != "NS") |> arrange(padj, desc(abs(NES)))
+    capped_table(tab |> transmute(pathway, collection, direction, NES, padj, size, leading_edge_n,
+                                  leading_edge = first_genes(leading_edge)),
+                 paste0(ct, "_gsea_expression.tsv"), numeric_cols = "NES", sci_cols = "padj", full_df = tab)
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Gene sets over-represented among spliced genes (FDR < `r fdr_gs`)
+
+```{r}
+if (is.null(gds) || !any(gds$significant)) {
+    message_box("No gene sets pass the cut-off.")
+} else {
+    tab <- gds |> filter(significant) |> arrange(padj)
+    capped_table(tab |> transmute(gene_list, pathway, collection, overlap, size, list_size, universe_size,
+                                  fold_enrichment, padj, overlap_genes = first_genes(overlap_genes)),
+                 paste0(ct, "_gsea_splicing.tsv"), numeric_cols = "fold_enrichment", sci_cols = "padj", full_df = tab)
+}
+```

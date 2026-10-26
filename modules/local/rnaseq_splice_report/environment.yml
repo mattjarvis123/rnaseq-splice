@@ -1,0 +1,27 @@
+# R environment for the rnaseq-splice report (conda-forge). Also the basis for the pipeline container.
+#   micromamba create -n rnaseq-splice-report -f environment.yml
+name: rnaseq-splice-report
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.4
+  - pandoc
+  - r-rmarkdown=2.32
+  - r-flexdashboard=0.6.3
+  - r-knitr
+  - r-dplyr
+  - r-tidyr
+  - r-ggplot2
+  - r-plotly=4.12.1
+  - r-dt=0.34.0
+  - r-htmltools
+  - r-upsetr=1.4.1
+  - r-eulerr=7.1.0
+  - r-gridextra
+  - r-yaml
+  - r-jsonlite
+  # KEGG pathway maps (kegg_overlay.R)
+  - bioconductor-pathview=1.46.0
+  - bioconductor-org.hs.eg.db=3.20.0
+  - r-png

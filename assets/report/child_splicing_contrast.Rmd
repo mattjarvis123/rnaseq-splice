@@ -1,0 +1,194 @@
+
+`r ct` {data-navmenu="Splicing by contrast"}
+=====================================
+
+```{r}
+d      <- ds[[ct]]
+ct_row <- contrasts[contrasts$contrast == ct, ]
+n_hi   <- if (nrow(d)) sum(d$direction == "Higher inclusion") else 0
+n_lo   <- if (nrow(d)) sum(d$direction == "Lower inclusion") else 0
+```
+
+Row {data-height=150}
+-------------------------------------
+
+### Higher inclusion in `r ct_row$treatment`
+
+```{r}
+valueBox(format(n_hi, big.mark = ","), icon = "fa-arrow-up", color = col_up)
+```
+
+### Lower inclusion in `r ct_row$treatment`
+
+```{r}
+valueBox(format(n_lo, big.mark = ","), icon = "fa-arrow-down", color = col_down)
+```
+
+### Genes with a significant event
+
+```{r}
+valueBox(format(length(ds_genes[[ct]]), big.mark = ","), icon = "fa-dna", color = "#636363")
+```
+
+### Events tested
+
+```{r}
+valueBox(format(if (nrow(d)) sum(!is.na(d$FDR)) else 0, big.mark = ","), icon = "fa-list", color = "#636363")
+```
+
+```{r}
+ps <- list(df = NULL, note = "")
+if (nrow(d)) {
+    pd <- d |> filter(!is.na(FDR)) |>
+        # rMATS cannot resolve FDR below ~1e-15 and reports those events as 0; draw them at 1e-16
+        mutate(neglog10 = round(-log10(pmax(FDR, 1e-16)), 3), dPSI = round(dPSI, 3),
+               group = ifelse(direction == "NS", "NS", event_type),
+               group = factor(group, levels = c("NS", event_types)))
+    ps <- sample_points(pd, pd$direction != "NS")
+}
+```
+
+Row {data-height=520}
+-------------------------------------
+
+### ΔPSI volcano (`r ds_rule``r ps$note`)
+
+```{r}
+if (!nrow(d)) {
+    message_box("rMATS reported no events for this contrast.")
+} else {
+    pd <- ps$df
+    plot_ly(pd, x = ~dPSI, y = ~neglog10, color = ~group, colors = c(NS = col_ns, event_cols),
+            text = ~paste0(gene_name, " (", event_type, ")"), customdata = ~location,
+            type = "scattergl", mode = "markers", marker = list(size = 5, opacity = 0.7),
+            hovertemplate = "<b>%{text}</b><br>%{customdata}<br>ΔPSI %{x:.3f}<br>-log10 FDR %{y:.1f}<extra></extra>") |>
+        layout(xaxis = list(title = "ΔPSI (treatment − control)", range = c(-1, 1)),
+               yaxis = list(title = "-log10 FDR (FDR reported as 0 drawn at 16)"),
+               legend = list(orientation = "h", y = 1.08)) |>
+        compact_plotly()
+}
+```
+
+### ΔPSI of significant events by type
+
+```{r}
+sig <- if (nrow(d)) d |> filter(direction != "NS") else d
+if (!nrow(sig)) {
+    message_box(paste0("No events pass ", ds_rule, " for this contrast."))
+} else {
+    sig_t <- sig |> mutate(event_type = factor(event_type, levels = event_types))
+    if (nrow(sig) <= 3000) {
+        # few events: draw every point
+        plot_ly(sig_t, x = ~event_type, y = ~dPSI, color = ~event_type, colors = event_cols, type = "box",
+                boxpoints = "all", jitter = 0.4, pointpos = 0, marker = list(size = 3, opacity = 0.5),
+                text = ~gene_name, hovertemplate = "%{text}<br>ΔPSI %{y:.3f}<extra></extra>") |>
+            layout(showlegend = FALSE, xaxis = list(title = ""), yaxis = list(title = "ΔPSI (treatment − control)", range = c(-1, 1)))
+    } else {
+        # many events: embed only the box statistics (Tukey whiskers), not every value
+        st <- sig_t |> group_by(event_type) |>
+            summarise(q1 = quantile(dPSI, 0.25), med = median(dPSI), q3 = quantile(dPSI, 0.75),
+                      lo = min(dPSI[dPSI >= q1 - 1.5 * (q3 - q1)]), hi = max(dPSI[dPSI <= q3 + 1.5 * (q3 - q1)]),
+                      n = n(), .groups = "drop")
+        # five values per type (whisker ends, quartiles, median) redraw the same box with the
+        # "inclusive" quartile method
+        bx <- st |> mutate(x = paste0(event_type, " (n = ", format(n, big.mark = ","), ")")) |>
+            rowwise() |> reframe(event_type, x, y = c(lo, q1, med, q3, hi))
+        p <- plot_ly(bx, x = ~x, y = ~y, color = ~event_type, colors = event_cols, type = "box",
+                     quartilemethod = "inclusive", boxpoints = FALSE, hoverinfo = "y")
+        p |> layout(showlegend = FALSE, xaxis = list(title = "", type = "category"),
+                    yaxis = list(title = "ΔPSI (treatment − control)", range = c(-1, 1)))
+    }
+}
+```
+
+Row {data-height=450}
+-------------------------------------
+
+### Significant events by type and direction (`r ds_rule`)
+
+```{r}
+if (!nrow(sig)) {
+    message_box(paste0("No events pass ", ds_rule, " for this contrast."))
+} else {
+    cnt <- sig |> mutate(event_type = factor(event_type, levels = event_types)) |>
+        group_by(event_type, .drop = FALSE) |>
+        summarise(hi = sum(direction == "Higher inclusion"), lo = sum(direction == "Lower inclusion"),
+                  .groups = "drop")
+    updown_barplot(paste0(cnt$event_type, " (", event_labels[as.character(cnt$event_type)], ")"),
+                   cnt$hi, cnt$lo, up_name = "Higher inclusion", down_name = "Lower inclusion",
+                   ylab = "Number of DS events", legend_title = "Inclusion in treatment", noun = "events")
+}
+```
+
+```{r}
+# Top significant events of each type (lowest FDR, then largest |ΔPSI|), PSI per sample
+n_per_type <- as.integer(params$event_heatmap_per_type)
+hm_psi     <- identical(params$event_heatmap_scale, "psi")   # raw PSI (0-1) instead of row z-scores
+hm_ev <- if (nrow(sig) && n_per_type > 0) {
+    sig |> mutate(event_type = factor(event_type, levels = event_types)) |>
+        arrange(event_type, FDR, desc(abs(dPSI))) |>
+        group_by(event_type) |> slice_head(n = n_per_type) |> ungroup()
+} else sig[0, ]
+hm_height <- max(300, 18 * nrow(hm_ev) + 30 * length(unique(hm_ev$event_type)) + 280)
+```
+
+Row {data-height=`r hm_height`}
+-------------------------------------
+
+### Top `r n_per_type` significant events per type: PSI per sample (`r if (hm_psi) "PSI" else "row z-scores of PSI; hover for PSI"`)
+
+```{r}
+if (nrow(hm_ev) < 2) {
+    message_box("A heatmap needs at least two significant events.")
+} else {
+    psi <- event_psi(hm_ev, ct)
+    x_lab <- paste0(colnames(psi), " (", sample_cond[colnames(psi)], ")")
+    types <- intersect(event_types, as.character(hm_ev$event_type))
+    # One panel per event type; within each, rows are clustered by Euclidean distance of their
+    # PSI z-score profiles (complete linkage), with the dendrogram on the left
+    panels <- lapply(seq_along(types), function(i) {
+        ty  <- types[i]
+        idx <- which(hm_ev$event_type == ty)
+        m   <- psi[idx, , drop = FALSE]
+        z   <- row_z(m)
+        e   <- hm_ev[idx, ]
+        txt <- matrix(paste0("<b>", e$gene_name, "</b> (", ty, ")<br>", e$location,
+                             "<br>ΔPSI ", sprintf("%.3f", e$dPSI), ", FDR ", fmt_p(e$FDR)),
+                      nrow(e), ncol(m))
+        txt <- matrix(paste0(txt, "<br>", rep(x_lab, each = nrow(e)), "<br>PSI ",
+                             ifelse(is.na(m), "NA", sprintf("%.3f", m)), ", z = ", sprintf("%.2f", z)), nrow(e))
+        cluster_heatmap(z, x_lab, event_label(e), txt, zs = if (hm_psi) m else z,
+                        colors = if (hm_psi) grDevices::hcl.colors(101, "YlGnBu", rev = TRUE) else div_cols,
+                        zmin = if (hm_psi) 0 else -2.5, zmax = if (hm_psi) 1 else 2.5, showscale = i == 1,
+                        colorbar = list(title = list(text = if (hm_psi) "PSI" else "z", side = "top"),
+                                        orientation = "h", x = 0.75, xanchor = "center", y = 1,
+                                        yanchor = "bottom", len = 0.35, thickness = 12),
+                        show_x = i == length(types))$plot |>
+            layout(annotations = list(list(text = paste0("<b>", ty, "</b> — ", event_labels[[ty]]),
+                                           x = 0, xref = "paper", xanchor = "left", y = 1, yref = "paper",
+                                           yanchor = "bottom", showarrow = FALSE, font = list(size = 12))))
+    })
+    heights <- unname(vapply(types, function(ty) sum(hm_ev$event_type == ty), numeric(1)))
+    heights <- heights / sum(heights)
+    subplot(panels, nrows = length(panels), shareX = FALSE, titleX = TRUE, titleY = FALSE,
+            heights = heights, margin = c(0, 0, 0.035, 0.012)) |>
+        layout(margin = list(b = 170, l = 10, r = 10, t = 50))
+}
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Significant splicing events (`r ds_rule`)
+
+```{r}
+if (nrow(sig)) {
+    tab <- sig |> arrange(FDR, desc(abs(dPSI))) |>
+        transmute(event_id, event_type, gene_id, gene_name, location,
+                  PSI_treatment, PSI_control, dPSI, PValue, FDR, junction_reads)
+    capped_table(tab, paste0(ct, "_DS_events.tsv"),
+                 numeric_cols = c("PSI_treatment", "PSI_control", "dPSI"), sci_cols = c("PValue", "FDR"))
+} else {
+    message_box("No significant events to list.")
+}
+```

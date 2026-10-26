@@ -245,6 +245,7 @@ workflow MULTIQC_RNASEQ {
 
     emit:
     report = MULTIQC.out.report.map { _meta, report -> report }
+    data   = MULTIQC.out.data.map { _meta, data -> data }   // rnaseq-splice: read by the results report
 }
 
 

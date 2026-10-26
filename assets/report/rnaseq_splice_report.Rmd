@@ -1,0 +1,1117 @@
+---
+title: "`r params$title`"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+    self_contained: true
+    theme: cosmo
+    mathjax: null
+params:
+  results_dir: "results"
+  results_label: ""
+  aligner: "star_salmon"
+  samplesheet: "samplesheet.csv"
+  contrasts: "contrasts.csv"
+  fdr_de: 0.01
+  fdr_splicing: 0.01
+  lfc_de: 0
+  dpsi_splicing: 0
+  table_max_rows: 5000
+  plot_max_points: 20000
+  plot_ns_points: 2000
+  tables_dir: ""
+  tables_link: ""
+  fdr_gsea: 0.05
+  rmats_counts: "JC"
+  heatmap_top_n: 50
+  event_heatmap_per_type: 15
+  event_heatmap_scale: "z"
+  lookup_events_per_gene: 3
+  kegg_maps: true
+  kegg_top_n: 8
+  kegg_cache: ""
+  title: "rnaseq-splice report"
+  project: ""
+---
+
+<!--
+  rnaseq-splice results report
+  ----------------------------
+  Summarises the limma/voom differential expression (DE) and rMATS differential
+  splicing (DS) results written by the rnaseq-splice pipeline (fork of nf-core/rnaseq).
+
+  Render with report/render_report.R, or directly:
+    rmarkdown::render("rnaseq_splice_report.Rmd",
+                      params = list(results_dir = "results", samplesheet = "samplesheet.csv",
+                                    contrasts = "contrasts.csv"))
+
+  Significance: DE genes have limma adj.P.Val < fdr_de and |logFC| > lfc_de; DS events have rMATS
+  FDR < fdr_splicing and |dPSI| > dpsi_splicing. lfc_de and dpsi_splicing default to 0 (no effect-size
+  cut-off), so small but consistent changes are kept for downstream ontology analyses.
+
+  Large results: tables in the page show at most table_max_rows rows (lowest FDR first). Volcano/MA
+  plots draw every significant point (a random plot_max_points of them if there are more) and a random
+  plot_ns_points of the non-significant ones. When tables_dir is set, the full
+  significant gene/event tables are written there as TSV and linked from the page via tables_link.
+
+  Sign conventions (both follow treatment vs control from contrasts.csv):
+    logFC > 0  : higher expression in the treatment group
+    dPSI  > 0  : higher exon inclusion in the treatment group
+                 (the pipeline passes the treatment BAMs to rMATS as --b1)
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+suppressPackageStartupMessages({
+    library(flexdashboard)
+    library(dplyr)
+    library(tidyr)
+    library(ggplot2)
+    library(plotly)
+    library(DT)
+    library(htmltools)
+})
+
+report_dir <- normalizePath(dirname(knitr::current_input(dir = TRUE)))
+# Knit one child page. knit_child() returns htmlwidgets as raw HTML, which pandoc would otherwise
+# parse in full (several GB of memory for a multi-contrast report); marking each widget's JSON
+# payload as preserved makes rmarkdown set it aside before pandoc and restore it afterwards.
+knit_page <- function(file, envir = parent.frame()) {
+    out <- strsplit(knitr::knit_child(file.path(report_dir, file), envir = envir, quiet = TRUE), "\n")[[1]]
+    big <- grepl('^<script type="application/json"', out)
+    out[big] <- paste0("<!--html_preserve-->", out[big], "<!--/html_preserve-->")
+    paste(out, collapse = "\n")
+}
+aln_dir    <- file.path(params$results_dir, params$aligner)
+fdr_de     <- as.numeric(params$fdr_de)
+fdr_ds     <- as.numeric(params$fdr_splicing)
+lfc_de     <- as.numeric(params$lfc_de)
+dpsi_ds    <- as.numeric(params$dpsi_splicing)
+max_rows   <- as.integer(params$table_max_rows)
+max_points <- as.integer(params$plot_max_points)
+ns_points  <- as.integer(params$plot_ns_points)
+
+# Human-readable significance rules, used in titles and text
+de_rule <- paste0("FDR < ", fdr_de, if (lfc_de > 0) paste0(", |log2FC| > ", lfc_de) else ", no fold-change cut-off")
+ds_rule <- paste0("FDR < ", fdr_ds, if (dpsi_ds > 0) paste0(", |ΔPSI| > ", dpsi_ds) else ", no ΔPSI cut-off")
+
+# Full significant tables written next to the report (when tables_dir is set)
+tables_dir  <- params$tables_dir
+tables_link <- params$tables_link
+if (nzchar(tables_dir)) dir.create(tables_dir, showWarnings = FALSE, recursive = TRUE)
+write_full_table <- function(df, file) {
+    if (!nzchar(tables_dir)) return(invisible(NULL))
+    write.table(df, file.path(tables_dir, file), sep = "\t", quote = FALSE, row.names = FALSE)
+}
+# Keep the page responsive: show the first max_rows rows (already sorted) and say where the rest is
+capped_table <- function(df, file, ..., full_df = df) {
+    write_full_table(full_df, file)
+    n <- nrow(df)
+    note <- if (n > max_rows) {
+        htmltools::p(style = "margin: 0.3em 0.5em; color: #555;",
+            sprintf("Showing the %s rows with the lowest FDR out of %s. ", format(max_rows, big.mark = ","),
+                    format(n, big.mark = ",")),
+            if (nzchar(tables_link)) htmltools::tagList("Full table: ",
+                htmltools::a(href = file.path(tables_link, file), file)) else NULL)
+    } else if (nzchar(tables_link)) {
+        htmltools::p(style = "margin: 0.3em 0.5em; color: #555;", "Also saved as ",
+                     htmltools::a(href = file.path(tables_link, file), file))
+    }
+    htmltools::tagList(note, dt_table(head(df, max_rows), file_name = sub("\\.tsv$", "", file), ...))
+}
+# Volcano/MA plots: every significant point (a random max_points of them if there are more) plus a
+# random ns_points of the non-significant ones, which only show the shape of the background
+sample_points <- function(df, is_sig) {
+    n_sig <- sum(is_sig); n_ns <- sum(!is_sig)
+    if (n_sig <= max_points && n_ns <= ns_points) return(list(df = df, note = ""))
+    set.seed(1)
+    keep_sig <- if (n_sig > max_points) sample(which(is_sig), max_points) else which(is_sig)
+    keep_ns  <- if (n_ns > ns_points) sample(which(!is_sig), ns_points) else which(!is_sig)
+    fmt <- function(x) format(x, big.mark = ",")
+    note <- paste0(" — ", if (n_sig > max_points) paste0("random ", fmt(max_points), " of ") else "all ",
+                   fmt(n_sig), " significant",
+                   if (n_ns > ns_points) paste0(" + random ", fmt(ns_points), " of ", fmt(n_ns), " non-significant") else "",
+                   " shown")
+    list(df = df[sort(c(keep_sig, keep_ns)), ], note = note)
+}
+# plotly copies a fixed hovertemplate (and mode/type) onto every point when traces come from a colour
+# mapping; collapse those to single values, which makes scatter plots about 4x smaller in the HTML
+compact_plotly <- function(p) {
+    b <- plotly_build(p)
+    b$x$data <- lapply(b$x$data, function(tr) {
+        for (k in c("hovertemplate", "mode", "type", "name")) {
+            v <- tr[[k]]
+            if (length(v) > 1 && length(unique(unlist(v))) == 1) tr[[k]] <- unlist(v)[1]
+        }
+        tr
+    })
+    b
+}
+
+# Colours: direction (up/down), shared by DE and splicing plots
+col_up   <- "#EE9A00"   # orange2: up-regulated / higher inclusion
+col_down <- "#6495ED"   # cornflowerblue: down-regulated / lower inclusion
+col_ns   <- "#BDBDBD"
+event_types  <- c("SE", "MXE", "A3SS", "A5SS", "RI")
+event_labels <- c(SE = "Skipped exon", MXE = "Mutually exclusive exons",
+                  A3SS = "Alternative 3' splice site", A5SS = "Alternative 5' splice site",
+                  RI = "Retained intron")
+event_cols   <- c(SE = "#1B9E77", MXE = "#D95F02", A3SS = "#7570B3", A5SS = "#E7298A", RI = "#66A61E")
+
+fmt_p <- function(x) formatC(x, format = "e", digits = 2)
+
+# Searchable table with CSV/Excel export of every row (not only the visible page)
+dt_table <- function(df, numeric_cols = NULL, sci_cols = NULL, page_len = 15, file_name = "table") {
+    dt <- DT::datatable(
+        df,
+        rownames   = FALSE,
+        filter     = "top",
+        extensions = "Buttons",
+        options    = list(
+            pageLength = page_len,
+            scrollX    = TRUE,
+            dom        = "Bfrtip",
+            buttons    = list(
+                list(extend = "csv",   filename = file_name, exportOptions = list(modifier = list(page = "all"))),
+                list(extend = "excel", filename = file_name, exportOptions = list(modifier = list(page = "all")))
+            )
+        ),
+        class = "compact stripe hover"
+    )
+    if (length(numeric_cols)) dt <- DT::formatRound(dt, numeric_cols, digits = 3)
+    if (length(sci_cols))     dt <- DT::formatSignif(dt, sci_cols, digits = 3)
+    dt
+}
+
+# Up/down bar chart in the style of Matt's InSphero DEG plots (ggplot geom_col + theme_bw,
+# scale_fill_manual(c("cornflowerblue", "orange2"))): up counts as positive orange bars, down counts
+# as negative blue bars, each labelled with its absolute count; hovering shows the count too.
+updown_barplot <- function(x, n_up, n_down, up_name = "Up", down_name = "Down",
+                           ylab = "Number of DEGs", legend_title = "Regulation", noun = "genes") {
+    x   <- factor(x, levels = unique(x))
+    lim <- max(c(n_up, n_down, 1)) * 1.2          # symmetric axis with room for the labels
+    bw_axis <- list(showline = TRUE, mirror = TRUE, linecolor = "#333333", linewidth = 1,
+                    showgrid = TRUE, gridcolor = "#EBEBEB", zeroline = FALSE,
+                    ticks = "outside", tickcolor = "#333333", tickfont = list(color = "#4D4D4D"))
+    bar <- function(p, y, n, name, colour) {
+        add_bars(p, x = x, y = y, name = name, marker = list(color = colour),
+                 text = format(n, big.mark = ",", trim = TRUE), textposition = "outside",
+                 textfont = list(color = "black", size = 13), cliponaxis = FALSE, customdata = n,
+                 hovertemplate = paste0("%{x}<br>%{customdata:,} ", noun, "<extra>", name, "</extra>"))
+    }
+    plot_ly() |>
+        bar(-n_down, n_down, down_name, col_down) |>
+        bar(n_up, n_up, up_name, col_up) |>
+        layout(barmode = "relative", bargap = 0.1, plot_bgcolor = "white",
+               xaxis = c(bw_axis, list(title = "", tickangle = -45, type = "category",
+                                       categoryorder = "array", categoryarray = levels(x))),
+               yaxis = c(bw_axis, list(title = ylab, range = c(-lim, lim))),
+               legend = list(title = list(text = legend_title), traceorder = "normal"))
+}
+
+message_box <- function(text) {
+    htmltools::div(style = "padding: 1em; color: #555; font-style: italic;", text)
+}
+
+# ---------------------------------------------------------------------------
+# Inputs
+# ---------------------------------------------------------------------------
+
+samples <- read.csv(params$samplesheet, stringsAsFactors = FALSE) |>
+    distinct(sample, condition)          # technical replicates share a sample id
+contrasts <- read.csv(params$contrasts, stringsAsFactors = FALSE)
+
+# Gene id -> gene name, from the Salmon gene count matrix written by nf-core/rnaseq
+gene_names <- local({
+    f <- file.path(aln_dir, "salmon.merged.gene_counts.tsv")
+    if (file.exists(f)) {
+        read.delim(f, check.names = FALSE)[, c("gene_id", "gene_name")] |> distinct(gene_id, .keep_all = TRUE)
+    } else {
+        data.frame(gene_id = character(), gene_name = character())
+    }
+})
+
+# limma/voom results, one table per contrast
+read_limma <- function(ct) {
+    f <- file.path(aln_dir, "limma", ct, paste0(ct, ".limma.results.tsv"))
+    if (!file.exists(f)) return(NULL)
+    read.delim(f, check.names = FALSE) |>
+        left_join(gene_names, by = "gene_id") |>
+        mutate(
+            gene_name = coalesce(gene_name, gene_id),
+            FDR       = adj.P.Val,
+            direction = case_when(FDR < fdr_de & abs(logFC) > lfc_de & logFC > 0 ~ "Up",
+                                  FDR < fdr_de & abs(logFC) > lfc_de & logFC < 0 ~ "Down",
+                                  TRUE                                           ~ "NS")
+        )
+}
+de <- setNames(lapply(contrasts$contrast, read_limma), contrasts$contrast)
+de <- de[!vapply(de, is.null, logical(1))]
+
+# voom log-CPM of all samples (every contrast is fitted on the same matrix, so take the first)
+logcpm <- local({
+    f <- if (length(de)) file.path(aln_dir, "limma", names(de)[1], paste0(names(de)[1], ".normalised_counts.tsv"))
+    if (length(f) && file.exists(f)) {
+        m <- read.delim(f, check.names = FALSE)
+        rownames(m) <- m$gene_id
+        as.matrix(m[, setdiff(colnames(m), "gene_id"), drop = FALSE])
+    } else NULL
+})
+
+# rMATS events, all five types, one table per contrast
+psi_mean <- function(x) {
+    vapply(strsplit(as.character(x), ","), function(v) {
+        v <- suppressWarnings(as.numeric(v))
+        if (all(is.na(v))) NA_real_ else mean(v, na.rm = TRUE)
+    }, numeric(1))
+}
+reads_sum <- function(x) {
+    vapply(strsplit(as.character(x), ","), function(v) sum(suppressWarnings(as.numeric(v)), na.rm = TRUE), numeric(1))
+}
+# Genomic location of the alternative region of each event (1-based, inclusive)
+event_location <- function(d, type) {
+    loc <- switch(type,
+        SE   = paste0(d$exonStart_0base + 1, "-", d$exonEnd),
+        RI   = paste0(d$upstreamEE + 1, "-", d$downstreamES),
+        MXE  = paste0(d$`1stExonStart_0base` + 1, "-", d$`1stExonEnd`, " | ",
+                      d$`2ndExonStart_0base` + 1, "-", d$`2ndExonEnd`),
+        A3SS = ,
+        A5SS = paste0("long ", d$longExonStart_0base + 1, "-", d$longExonEnd,
+                      " | short ", d$shortES + 1, "-", d$shortEE)
+    )
+    paste0(d$chr, ":", loc, " (", d$strand, ")")
+}
+read_rmats <- function(ct) {
+    out <- lapply(event_types, function(type) {
+        # the read-coverage filtered tables (rmats/<contrast>/filtered/, pipeline --rmats_min_reads)
+        # when the pipeline wrote them, otherwise rMATS's own output
+        fname <- paste0(type, ".MATS.", params$rmats_counts, ".txt")
+        f <- file.path(aln_dir, "rmats", ct, "filtered", fname)
+        if (!file.exists(f)) f <- file.path(aln_dir, "rmats", ct, fname)
+        if (!file.exists(f)) return(NULL)
+        d <- read.delim(f, check.names = FALSE, stringsAsFactors = FALSE)
+        if (!nrow(d)) return(NULL)
+        d <- d[, !duplicated(colnames(d))]     # rMATS repeats the ID column
+        # rMATS numbers events per run, so events are matched across contrasts by their coordinates
+        coord_cols <- colnames(d)[seq(which(colnames(d) == "strand") + 1, which(colnames(d) == "IJC_SAMPLE_1") - 1)]
+        coord_cols <- setdiff(coord_cols, "ID")
+        data.frame(
+            event_id     = paste0(type, "_", d$ID),
+            event_key    = paste(type, d$chr, d$strand, do.call(paste, c(d[coord_cols], sep = ":")), sep = "|"),
+            event_type   = type,
+            gene_id      = gsub('"', "", d$GeneID),
+            gene_name    = gsub('"', "", d$geneSymbol),
+            location     = event_location(d, type),
+            PSI_treatment = psi_mean(d$IncLevel1),
+            PSI_control   = psi_mean(d$IncLevel2),
+            dPSI         = d$IncLevelDifference,
+            PValue       = d$PValue,
+            FDR          = d$FDR,
+            junction_reads = reads_sum(d$IJC_SAMPLE_1) + reads_sum(d$SJC_SAMPLE_1) +
+                             reads_sum(d$IJC_SAMPLE_2) + reads_sum(d$SJC_SAMPLE_2),
+            # per-sample PSI, comma separated, in samplesheet order within each condition
+            # (the order the pipeline writes the rMATS bam lists in); parsed only where needed
+            inc1         = as.character(d$IncLevel1),
+            inc2         = as.character(d$IncLevel2),
+            stringsAsFactors = FALSE
+        )
+    })
+    out <- bind_rows(out)
+    if (!nrow(out)) return(out)
+    out |>
+        mutate(
+            gene_name = ifelse(is.na(gene_name) | gene_name %in% c("", "NA"), gene_id, gene_name),
+            sig       = !is.na(FDR) & !is.na(dPSI) & FDR < fdr_ds & abs(dPSI) > dpsi_ds,
+            direction = case_when(sig & dPSI > 0 ~ "Higher inclusion",
+                                  sig & dPSI < 0 ~ "Lower inclusion",
+                                  TRUE           ~ "NS")
+        )
+}
+ds <- setNames(lapply(contrasts$contrast, read_rmats), contrasts$contrast)
+rmats_filtered <- any(dir.exists(file.path(aln_dir, "rmats", contrasts$contrast, "filtered")))
+has_ds <- any(vapply(ds, nrow, integer(1)) > 0)
+
+# MultiQC general statistics (one row per sample; FastQC adds "<sample> Read 1/2" rows)
+mqc <- local({
+    f <- list.files(file.path(params$results_dir, "multiqc"), pattern = "^multiqc_general_stats\\.txt$",
+                    recursive = TRUE, full.names = TRUE)
+    if (length(f)) read.delim(f[1], check.names = FALSE, stringsAsFactors = FALSE) else NULL
+})
+
+# Software versions collated by the pipeline
+versions <- local({
+    f <- list.files(file.path(params$results_dir, "pipeline_info"), pattern = "software_mqc_versions\\.yml$",
+                    full.names = TRUE)
+    if (!length(f)) return(NULL)
+    y <- yaml::read_yaml(f[1])
+    bind_rows(lapply(names(y), function(p) {
+        if (!is.list(y[[p]])) return(NULL)
+        data.frame(process = p, tool = names(y[[p]]), version = vapply(y[[p]], as.character, character(1)))
+    })) |> distinct(tool, version, .keep_all = TRUE) |> arrange(tolower(tool))
+})
+
+# Gene set enrichment (fgsea) results written by the pipeline's --gsea step, one folder per contrast.
+# Calls are re-made here at fdr_gsea so the report can use a different cut-off than the pipeline run.
+fdr_gs <- as.numeric(params$fdr_gsea)
+read_gsea <- function(ct, suffix) {
+    f <- file.path(aln_dir, "gsea", ct, paste0(ct, suffix))
+    if (file.exists(f)) read.delim(f, check.names = FALSE, stringsAsFactors = FALSE) else NULL
+}
+gsea_de <- lapply(setNames(contrasts$contrast, contrasts$contrast), read_gsea, ".fgsea_de.tsv")
+gsea_de <- lapply(gsea_de[!vapply(gsea_de, is.null, logical(1))], function(g) {
+    g$direction <- ifelse(!is.na(g$padj) & g$padj < fdr_gs, ifelse(g$NES > 0, "Up", "Down"), "NS")
+    g
+})
+gsea_ds <- lapply(setNames(contrasts$contrast, contrasts$contrast), read_gsea, ".fgsea_splicing.tsv")
+gsea_ds <- lapply(gsea_ds[!vapply(gsea_ds, is.null, logical(1))], function(g) {
+    g$significant <- !is.na(g$padj) & g$padj < fdr_gs
+    g
+})
+has_gsea <- length(gsea_de) + length(gsea_ds) > 0
+# Settings the pipeline used (latest params_*.json in pipeline_info), for the methods text
+run_params <- local({
+    f <- sort(list.files(file.path(params$results_dir, "pipeline_info"), pattern = "^params_.*\\.json$", full.names = TRUE))
+    if (length(f)) jsonlite::fromJSON(f[length(f)]) else list()
+})
+run_param <- function(name, default) if (!is.null(run_params[[name]])) run_params[[name]] else default
+# Long gene set names do not fit on a plot axis: shorten them (the full name is in the hover text)
+short_name <- function(x, n = 55) make.unique(ifelse(nchar(x) > n, paste0(substr(x, 1, n - 1), "…"), x), sep = " ")
+first_genes <- function(x, n = 15) {
+    vapply(strsplit(x, ";", fixed = TRUE), function(g) {
+        if (length(g) > n) paste0(paste(g[seq_len(n)], collapse = ";"), "; … (", length(g), " genes)") else paste(g, collapse = ";")
+    }, character(1))
+}
+
+ct_levels   <- contrasts$contrast
+sample_cond <- setNames(samples$condition, samples$sample)
+cond_cols   <- setNames(
+    grDevices::hcl.colors(max(3, length(unique(samples$condition))), "Dark 3")[seq_along(unique(samples$condition))],
+    unique(samples$condition)
+)
+# Conditions in a natural order for plots: controls first, then treatments in contrasts.csv order
+# (list the contrasts by increasing dose to get dose order), then anything else
+cond_order <- unique(c(contrasts$control, contrasts$treatment, samples$condition))
+cond_order <- cond_order[cond_order %in% samples$condition]
+sample_order <- unlist(lapply(cond_order, function(cd) samples$sample[samples$condition == cd]))
+
+# Per-sample PSI of selected events of one contrast: a matrix events x samples (control samples first).
+# IncLevel1 holds the treatment samples and IncLevel2 the control samples, each in samplesheet order.
+parse_psi <- function(x, n) {
+    m <- do.call(rbind, lapply(strsplit(x, ",", fixed = TRUE), function(v) {
+        v <- suppressWarnings(as.numeric(v)); length(v) <- n; v
+    }))
+    if (is.null(m)) matrix(NA_real_, 0, n) else m
+}
+event_psi <- function(ev, ct) {
+    ct_row <- contrasts[contrasts$contrast == ct, ]
+    s_trt  <- samples$sample[samples$condition == ct_row$treatment]
+    s_ctl  <- samples$sample[samples$condition == ct_row$control]
+    m <- cbind(parse_psi(ev$inc2, length(s_ctl)), parse_psi(ev$inc1, length(s_trt)))
+    colnames(m) <- c(s_ctl, s_trt)
+    rownames(m) <- ev$event_id
+    m
+}
+# Short readable label of an event: gene, type and the first region of its location (full location in hovers)
+event_label <- function(ev) {
+    loc <- sub(" \\|.*$", "", sub(" \\([+-]\\)$", "", ev$location))
+    paste0(ev$gene_name, " · ", ev$event_type, " ", sub(":long ", ":", loc))
+}
+
+# Row z-scores; rows without variation become 0
+row_z <- function(m) {
+    z <- t(scale(t(m)))
+    z[!is.finite(z)] <- 0
+    z
+}
+# Diverging colour scale (blue - white - orange) shared by heatmaps
+div_cols <- grDevices::colorRampPalette(c(col_down, "white", col_up))(101)
+
+# Heatmap with rows clustered by Euclidean distance (complete linkage), as on the Across contrasts
+# page: dendrogram on the left, row labels on the right.
+#   zc: matrix the rows are clustered on (NA counts as 0); zs: matrix shown (default zc)
+#   text: hover text matrix (same shape as zc), x: column labels, ylab: row labels
+#   show_x: draw the column labels (FALSE for all but the bottom panel of a stack)
+# Returns the plotly object and the row order, so callers can reorder their own annotations.
+cluster_heatmap <- function(zc, x, ylab, text, zs = zc, colors = div_cols, zmin = -2.5, zmax = 2.5,
+                            showscale = TRUE, colorbar = list(title = "z"), show_x = TRUE,
+                            dendro_width = 0.15) {
+    filled <- zc; filled[!is.finite(filled)] <- 0
+    hc  <- if (nrow(zc) > 2) hclust(dist(filled, method = "euclidean"), method = "complete") else NULL
+    ord <- if (is.null(hc)) seq_len(nrow(zc)) else hc$order
+    ylab <- make.unique(ylab[ord])
+    ypos <- seq_len(nrow(zc))                        # row i sits at y = i (top to bottom)
+    yaxis <- list(title = "", autorange = "reversed", range = c(nrow(zc) + 0.5, 0.5),
+                  showgrid = FALSE, zeroline = FALSE)
+    hm <- plot_ly(x = x, y = ypos, z = zs[ord, , drop = FALSE], text = text[ord, , drop = FALSE],
+                  type = "heatmap", colors = colors, zmin = zmin, zmax = zmax, showscale = showscale,
+                  colorbar = colorbar, hovertemplate = "%{text}<extra></extra>") |>
+        layout(xaxis = list(title = "", type = "category", tickangle = -45, showticklabels = show_x),
+               yaxis = c(yaxis, list(side = "right", tickmode = "array", tickvals = ypos, ticktext = ylab,
+                                     tickfont = list(size = 10))))
+    if (is.null(hc)) return(list(plot = hm, order = ord))
+    # dendrogram segments from the hclust merges: leaves at height 0, root on the left
+    leaf_y <- integer(length(ord)); leaf_y[ord] <- ypos
+    node_y <- numeric(nrow(hc$merge)); sx <- sy <- c()
+    child <- function(k) if (k < 0) c(leaf_y[-k], 0) else c(node_y[k], hc$height[k])
+    for (i in seq_len(nrow(hc$merge))) {
+        a <- child(hc$merge[i, 1]); b <- child(hc$merge[i, 2]); h <- hc$height[i]
+        node_y[i] <- (a[1] + b[1]) / 2
+        sx <- c(sx, a[2], h, h, b[2], NA); sy <- c(sy, a[1], a[1], b[1], b[1], NA)
+    }
+    dg <- plot_ly(x = sx, y = sy, type = "scatter", mode = "lines", line = list(color = "#555555", width = 1),
+                  hoverinfo = "skip", showlegend = FALSE) |>
+        layout(xaxis = list(title = if (show_x) "Euclidean distance" else "", autorange = "reversed",
+                            showgrid = FALSE, zeroline = FALSE, showticklabels = show_x,
+                            titlefont = list(size = 10), tickfont = list(size = 9)),
+               yaxis = c(yaxis, list(showticklabels = FALSE)))
+    list(plot = subplot(dg, hm, widths = c(dendro_width, 1 - dendro_width), shareY = FALSE, titleX = TRUE,
+                        margin = 0.005),
+         order = ord)
+}
+```
+
+Overview
+=====================================
+
+Row {data-height=170}
+-------------------------------------
+
+### Samples
+
+```{r}
+valueBox(nrow(samples), icon = "fa-vial", color = "primary")
+```
+
+### Conditions
+
+```{r}
+valueBox(length(unique(samples$condition)), icon = "fa-layer-group", color = "info")
+```
+
+### Contrasts
+
+```{r}
+valueBox(nrow(contrasts), icon = "fa-code-compare", color = "success")
+```
+
+### Significance
+
+```{r}
+valueBox(paste0(fdr_de, " / ", fdr_ds), icon = "fa-filter", color = "warning",
+         caption = paste0("FDR cut-off (DE / splicing)",
+                          if (lfc_de > 0 || dpsi_ds > 0) paste0("; |log2FC| > ", lfc_de, ", |ΔPSI| > ", dpsi_ds) else ""))
+```
+
+Row
+-------------------------------------
+
+### About this report
+
+```{r}
+htmltools::tagList(
+    if (nzchar(params$project)) tags$p(tags$b("Project: "), params$project),
+    tags$p(tags$b("Generated: "), format(Sys.time(), "%Y-%m-%d %H:%M %Z")),
+    tags$p(tags$b("Results folder: "), tags$code(if (nzchar(params$results_label)) params$results_label
+                                                 else normalizePath(params$results_dir, mustWork = FALSE))),
+    tags$p(
+        "Differential expression from limma/voom and differential splicing from rMATS, ",
+        "both computed by the rnaseq-splice pipeline for every contrast below. ",
+        "Differentially expressed genes: limma adjusted p-value (BH) ", sub("^FDR", "", de_rule), ". ",
+        "Differentially spliced events: rMATS ", ds_rule, ". ",
+        if (lfc_de == 0 && dpsi_ds == 0) tags$b("No fold-change or ΔPSI cut-off is applied.")
+    ),
+    tags$p(
+        tags$b("Direction: "), "logFC > 0 means higher expression in the treatment group; ",
+        "ΔPSI > 0 means higher exon inclusion in the treatment group."
+    )
+)
+```
+
+### Contrasts
+
+```{r}
+ct_tab <- contrasts |>
+    rowwise() |>
+    mutate(
+        n_treatment = sum(samples$condition == treatment),
+        n_control   = sum(samples$condition == control),
+        DE_genes    = if (contrast %in% names(de)) sum(de[[contrast]]$direction != "NS") else NA_integer_,
+        DS_events   = if (nrow(ds[[contrast]])) sum(ds[[contrast]]$direction != "NS") else 0L
+    ) |>
+    ungroup()
+knitr::kable(ct_tab, col.names = c("Contrast", "Treatment", "Control", "n treatment", "n control",
+                                   "DE genes", "DS events"))
+```
+
+Row
+-------------------------------------
+
+### Samples
+
+```{r}
+dt_table(samples, file_name = "samples", page_len = 25)
+```
+
+
+QC
+=====================================
+
+```{r qc-data}
+qc <- NULL
+if (!is.null(mqc)) {
+    pick <- function(col) if (col %in% colnames(mqc)) mqc[[col]] else rep(NA_real_, nrow(mqc))
+    qc <- data.frame(
+        sample             = mqc$Sample,
+        # MultiQC general statistics store STAR read counts in millions
+        total_reads        = round(pick("star-total_reads") * 1e6),
+        uniquely_mapped    = round(pick("star-uniquely_mapped") * 1e6),
+        uniquely_mapped_pc = pick("star-uniquely_mapped_percent"),
+        multimapped        = round(pick("star-multimapped") * 1e6),
+        salmon_mapped_pc   = pick("salmon-percent_mapped"),
+        duplication_pc     = pick("picard_mark_duplicates-PERCENT_DUPLICATION")
+    ) |> filter(sample %in% samples$sample)
+    qc$condition <- sample_cond[qc$sample]
+    qc <- qc[order(qc$condition, qc$sample), ]
+}
+```
+
+Row
+-------------------------------------
+
+### Reads per sample (STAR)
+
+```{r}
+if (is.null(qc) || all(is.na(qc$total_reads))) {
+    message_box("MultiQC general statistics with STAR results were not found.")
+} else {
+    long <- qc |>
+        transmute(sample, condition,
+                  `Uniquely mapped` = uniquely_mapped,
+                  `Multi-mapped`    = multimapped,
+                  `Unmapped/other`  = pmax(total_reads - uniquely_mapped - multimapped, 0)) |>
+        pivot_longer(-c(sample, condition), names_to = "category", values_to = "reads") |>
+        mutate(sample = factor(sample, levels = qc$sample),
+               category = factor(category, levels = c("Unmapped/other", "Multi-mapped", "Uniquely mapped")))
+    plot_ly(long, x = ~sample, y = ~reads, color = ~category, type = "bar",
+            colors = c("#D9D9D9", "#9ECAE1", "#3182BD"),
+            hovertemplate = "%{x}<br>%{y:,.0f} reads<extra>%{fullData.name}</extra>") |>
+        layout(barmode = "stack", xaxis = list(title = ""), yaxis = list(title = "Reads"),
+               legend = list(orientation = "h", y = 1.1))
+}
+```
+
+### Mapping rate
+
+```{r}
+if (is.null(qc) || all(is.na(qc$uniquely_mapped_pc))) {
+    message_box("Mapping rates were not found in the MultiQC general statistics.")
+} else {
+    plot_ly(qc, x = ~factor(sample, levels = sample), y = ~uniquely_mapped_pc, color = ~condition,
+            colors = cond_cols, type = "bar",
+            hovertemplate = "%{x}<br>%{y:.1f}% uniquely mapped<extra></extra>") |>
+        layout(xaxis = list(title = ""), yaxis = list(title = "% uniquely mapped (STAR)", range = c(0, 100)),
+               legend = list(orientation = "h", y = 1.1))
+}
+```
+
+Row
+-------------------------------------
+
+### QC summary table
+
+```{r}
+if (is.null(qc)) {
+    message_box("MultiQC general statistics were not found.")
+} else {
+    # Drop columns MultiQC had no values for (e.g. Salmon mapping rate in alignment mode)
+    qc_tab <- qc |> select(sample, condition, everything()) |> select(where(~ !all(is.na(.x))))
+    dt_table(qc_tab,
+             numeric_cols = intersect(c("uniquely_mapped_pc", "salmon_mapped_pc", "duplication_pc"), colnames(qc_tab)),
+             file_name = "qc_summary", page_len = 25) |>
+        DT::formatRound(intersect(c("total_reads", "uniquely_mapped", "multimapped"), colnames(qc_tab)), digits = 0)
+}
+```
+
+
+Sample structure
+=====================================
+
+```{r pca-data}
+pca <- NULL
+if (!is.null(logcpm) && ncol(logcpm) >= 3) {
+    v   <- apply(logcpm, 1, var)
+    top <- logcpm[order(v, decreasing = TRUE)[seq_len(min(500, nrow(logcpm)))], , drop = FALSE]
+    pc  <- prcomp(t(top), center = TRUE, scale. = FALSE)
+    var_exp <- 100 * pc$sdev^2 / sum(pc$sdev^2)
+    pca <- data.frame(sample = rownames(pc$x), pc$x[, 1:min(3, ncol(pc$x)), drop = FALSE])
+    pca$condition <- sample_cond[pca$sample]
+}
+```
+
+Row {data-height=550}
+-------------------------------------
+
+### PCA (voom log-CPM, 500 most variable genes)
+
+```{r}
+if (is.null(pca)) {
+    message_box("PCA needs the voom normalised counts and at least three samples.")
+} else {
+    plot_ly(pca, x = ~PC1, y = ~PC2, color = ~condition, colors = cond_cols, text = ~sample,
+            type = "scatter", mode = "markers", marker = list(size = 12, line = list(width = 1, color = "#333")),
+            hovertemplate = "%{text}<br>PC1 %{x:.1f}<br>PC2 %{y:.1f}<extra></extra>") |>
+        layout(xaxis = list(title = sprintf("PC1 (%.1f%%)", var_exp[1])),
+               yaxis = list(title = sprintf("PC2 (%.1f%%)", var_exp[2])))
+}
+```
+
+### Sample correlation (Pearson, voom log-CPM)
+
+```{r}
+if (is.null(logcpm) || ncol(logcpm) < 2) {
+    message_box("Sample correlations need the voom normalised counts.")
+} else {
+    cm  <- cor(logcpm, method = "pearson")
+    ord <- hclust(as.dist(1 - cm))$order
+    cm  <- cm[ord, ord]
+    plot_ly(x = colnames(cm), y = rownames(cm), z = cm, type = "heatmap", colors = "Blues",
+            hovertemplate = "%{x} vs %{y}<br>r = %{z:.3f}<extra></extra>") |>
+        layout(xaxis = list(title = "", tickangle = -45), yaxis = list(title = "", autorange = "reversed"))
+}
+```
+
+Row {data-height=320}
+-------------------------------------
+
+### Variance explained
+
+```{r}
+if (!is.null(pca)) {
+    ve <- data.frame(PC = factor(paste0("PC", seq_along(var_exp)), levels = paste0("PC", seq_along(var_exp))), pct = var_exp)
+    plot_ly(ve, x = ~PC, y = ~pct, type = "bar", marker = list(color = "#3182BD"),
+            hovertemplate = "%{x}: %{y:.1f}%<extra></extra>") |>
+        layout(xaxis = list(title = ""), yaxis = list(title = "% variance"))
+}
+```
+
+
+DE summary
+=====================================
+
+```{r de-summary-data}
+de_counts <- bind_rows(lapply(names(de), function(ct) {
+    data.frame(contrast = ct,
+               Up   = sum(de[[ct]]$direction == "Up"),
+               Down = sum(de[[ct]]$direction == "Down"),
+               tested = nrow(de[[ct]]))
+}))
+de_sets <- lapply(de, function(d) d$gene_id[d$direction != "NS"])
+```
+
+Row {data-height=450}
+-------------------------------------
+
+### DE genes per contrast (`r de_rule`)
+
+```{r}
+if (!nrow(de_counts)) {
+    message_box("No limma results were found.")
+} else {
+    cnt <- de_counts[match(ct_levels, de_counts$contrast), ] |> filter(!is.na(contrast))
+    updown_barplot(cnt$contrast, cnt$Up, cnt$Down)
+}
+```
+
+### Summary table
+
+```{r}
+if (nrow(de_counts)) {
+    dt_table(de_counts |> mutate(Total = Up + Down, `% of tested` = round(100 * Total / tested, 1)) |>
+                 select(contrast, Up, Down, Total, tested, `% of tested`),
+             file_name = "de_summary")
+}
+```
+
+Row {data-height=520}
+-------------------------------------
+
+### Overlap of DE genes between contrasts (UpSet)
+
+```{r, fig.width=9, fig.height=5}
+non_empty <- de_sets[lengths(de_sets) > 0]
+if (length(non_empty) < 2) {
+    message_box("An UpSet plot needs at least two contrasts with DE genes.")
+} else {
+    UpSetR::upset(UpSetR::fromList(non_empty), nsets = length(non_empty), order.by = "freq",
+                  main.bar.color = "#3182BD", sets.bar.color = "#636363", text.scale = 1.3)
+}
+```
+
+### Overlap (Euler diagram)
+
+```{r, fig.width=6, fig.height=5}
+if (length(non_empty) < 2) {
+    message_box("A Euler diagram needs at least two contrasts with DE genes.")
+} else if (length(non_empty) > 5) {
+    message_box("Euler diagrams are shown for up to five contrasts; see the UpSet plot.")
+} else {
+    plot(eulerr::euler(non_empty), quantities = TRUE,
+         fills = list(fill = grDevices::hcl.colors(length(non_empty), "Set 2"), alpha = 0.6))
+}
+```
+
+
+```{r de-pages, results='asis'}
+for (ct in names(de)) {
+    cat(knit_page("child_de_contrast.Rmd"))
+}
+```
+
+
+Splicing summary
+=====================================
+
+```{r ds-summary-data}
+ds_counts <- bind_rows(lapply(names(ds), function(ct) {
+    d <- ds[[ct]]
+    if (!nrow(d)) return(data.frame(contrast = ct, event_type = event_types, tested = 0L,
+                                    `Higher inclusion` = 0L, `Lower inclusion` = 0L, check.names = FALSE))
+    d |> mutate(event_type = factor(event_type, levels = event_types)) |>
+        group_by(event_type, .drop = FALSE) |>
+        summarise(tested = sum(!is.na(FDR)),
+                  `Higher inclusion` = sum(direction == "Higher inclusion"),
+                  `Lower inclusion`  = sum(direction == "Lower inclusion"), .groups = "drop") |>
+        mutate(contrast = ct, event_type = as.character(event_type))
+})) |> select(contrast, event_type, everything())
+ds_genes <- lapply(ds, function(d) if (nrow(d)) unique(d$gene_id[d$direction != "NS"]) else character())
+```
+
+Row {data-height=450}
+-------------------------------------
+
+### Significant splicing events by type (`r ds_rule`)
+
+```{r}
+if (!has_ds) {
+    message_box("No rMATS events were found for any contrast.")
+} else {
+    long <- ds_counts |> mutate(sig = `Higher inclusion` + `Lower inclusion`,
+                                event_type = factor(event_type, levels = event_types),
+                                contrast = factor(contrast, levels = ct_levels))
+    plot_ly(long, x = ~contrast, y = ~sig, color = ~event_type, colors = event_cols, type = "bar",
+            hovertemplate = "%{x}<br>%{y} events<extra>%{fullData.name}</extra>") |>
+        layout(barmode = "stack", xaxis = list(title = ""), yaxis = list(title = "Significant events"),
+               legend = list(orientation = "h", y = 1.1))
+}
+```
+
+### Direction of change (treatment vs control)
+
+```{r}
+if (has_ds) {
+    cnt <- ds_counts |> group_by(contrast) |>
+        summarise(hi = sum(`Higher inclusion`), lo = sum(`Lower inclusion`)) |>
+        mutate(contrast = factor(contrast, levels = ct_levels)) |> arrange(contrast)
+    updown_barplot(as.character(cnt$contrast), cnt$hi, cnt$lo, up_name = "Higher inclusion",
+                   down_name = "Lower inclusion", ylab = "Number of DS events",
+                   legend_title = "Inclusion in treatment", noun = "events")
+}
+```
+
+Row
+-------------------------------------
+
+### Events tested and significant, per contrast and type
+
+```{r}
+dt_table(ds_counts |> mutate(significant = `Higher inclusion` + `Lower inclusion`,
+                             event_type = paste0(event_type, " (", event_labels[event_type], ")")),
+         file_name = "splicing_summary", page_len = 25)
+```
+
+Row {data-height=520}
+-------------------------------------
+
+### Overlap of differentially spliced genes between contrasts (UpSet)
+
+```{r, fig.width=9, fig.height=5}
+non_empty_ds <- ds_genes[lengths(ds_genes) > 0]
+if (length(non_empty_ds) < 2) {
+    message_box("An UpSet plot needs at least two contrasts with differentially spliced genes.")
+} else {
+    UpSetR::upset(UpSetR::fromList(non_empty_ds), nsets = length(non_empty_ds), order.by = "freq",
+                  main.bar.color = "#1B9E77", sets.bar.color = "#636363", text.scale = 1.3)
+}
+```
+
+
+```{r ds-pages, results='asis'}
+for (ct in names(ds)) {
+    cat(knit_page("child_splicing_contrast.Rmd"))
+}
+```
+
+
+DE × splicing
+=====================================
+
+```{r overlap-data}
+overlap_counts <- bind_rows(lapply(contrasts$contrast, function(ct) {
+    de_g <- if (ct %in% names(de)) de_sets[[ct]] else character()
+    ds_g <- ds_genes[[ct]]
+    data.frame(contrast = ct, `DE only` = length(setdiff(de_g, ds_g)), `Both` = length(intersect(de_g, ds_g)),
+               `DS only` = length(setdiff(ds_g, de_g)), check.names = FALSE)
+}))
+overlap_genes <- bind_rows(lapply(contrasts$contrast, function(ct) {
+    if (!ct %in% names(de) || !nrow(ds[[ct]])) return(NULL)
+    both <- intersect(de_sets[[ct]], ds_genes[[ct]])
+    if (!length(both)) return(NULL)
+    ev <- ds[[ct]] |> filter(gene_id %in% both, direction != "NS") |>
+        group_by(gene_id) |>
+        summarise(sig_events = n(),
+                  event_types = paste(sort(unique(event_type)), collapse = ", "),
+                  dPSI_largest = dPSI[which.max(abs(dPSI))],   # signed dPSI of the event with the largest |dPSI|
+                  min_event_FDR = min(FDR), .groups = "drop")
+    de[[ct]] |> filter(gene_id %in% both) |>
+        select(gene_id, gene_name, logFC, DE_FDR = FDR) |>
+        left_join(ev, by = "gene_id") |>
+        mutate(contrast = ct) |>
+        select(contrast, everything())
+}))
+```
+
+Row {data-height=450}
+-------------------------------------
+
+### Genes that are differentially expressed and/or spliced
+
+```{r}
+if (!has_ds || !length(de)) {
+    message_box("Both limma and rMATS results are needed for this comparison.")
+} else {
+    long <- overlap_counts |> pivot_longer(-contrast, names_to = "class", values_to = "genes") |>
+        mutate(class = factor(class, levels = c("DE only", "Both", "DS only")),
+               contrast = factor(contrast, levels = ct_levels))
+    plot_ly(long, x = ~contrast, y = ~genes, color = ~class,
+            colors = c(`DE only` = "#3182BD", Both = "#756BB1", `DS only` = "#1B9E77"), type = "bar",
+            hovertemplate = "%{x}<br>%{y} genes<extra>%{fullData.name}</extra>") |>
+        layout(barmode = "group", xaxis = list(title = ""), yaxis = list(title = "Genes"),
+               legend = list(orientation = "h", y = 1.1))
+}
+```
+
+### Euler diagrams (DE genes vs DS genes)
+
+```{r, fig.width=7, fig.height=5}
+if (has_ds && length(de)) {
+    plots <- lapply(contrasts$contrast, function(ct) {
+        sets <- list(DE = if (ct %in% names(de)) de_sets[[ct]] else character(), DS = ds_genes[[ct]])
+        if (!length(sets$DE) && !length(sets$DS)) return(grid::textGrob(paste(ct, ": no significant genes")))
+        plot(eulerr::euler(sets), quantities = TRUE, main = ct,
+             fills = list(fill = c("#3182BD", "#1B9E77"), alpha = 0.6))
+    })
+    gridExtra::grid.arrange(grobs = plots, ncol = min(2, length(plots)))
+}
+```
+
+Row
+-------------------------------------
+
+### Genes both differentially expressed and differentially spliced
+
+```{r}
+if (is.null(overlap_genes) || !nrow(overlap_genes)) {
+    message_box("No genes are both differentially expressed and differentially spliced at these thresholds.")
+} else {
+    capped_table(overlap_genes |> arrange(DE_FDR), "de_and_ds_genes.tsv",
+                 numeric_cols = c("logFC", "dPSI_largest"), sci_cols = c("DE_FDR", "min_event_FDR"))
+}
+```
+
+
+```{r across-pages, results='asis'}
+# Cross-contrast (e.g. dose-response) page, when there are at least two contrasts
+if (length(intersect(ct_levels, union(names(de), names(ds)[vapply(ds, nrow, integer(1)) > 0]))) >= 2) {
+    cat(knit_page("child_across_contrasts.Rmd"))
+}
+```
+
+
+```{r gsea-pages, results='asis'}
+if (has_gsea) {
+    cat(knit_page("child_gsea_summary.Rmd"))
+    for (ct in ct_levels[ct_levels %in% union(names(gsea_de), names(gsea_ds))]) {
+        cat(knit_page("child_gsea_contrast.Rmd"))
+    }
+}
+```
+
+```{r kegg-data}
+# KEGG pathway maps (kegg_overlay.R, reworked from Matt's pathview.R) for the significant gene sets of
+# MSigDB's KEGG collection: expression maps coloured by log2FC of DE genes, splicing maps by the
+# lead-event ΔPSI of genes with a significant event
+kegg_top_n <- as.integer(params$kegg_top_n)
+kegg_cache <- if (nzchar(params$kegg_cache)) params$kegg_cache else file.path(tools::R_user_dir("rnaseq-splice", "cache"), "kegg")
+kegg_ids   <- read.delim(file.path(report_dir, "kegg_legacy_ids.tsv"), stringsAsFactors = FALSE)
+kegg_maps  <- list()
+has_kegg <- isTRUE(as.logical(params$kegg_maps)) && has_gsea && nzchar(tables_dir) &&   # maps are files next to the report
+    any(c(unlist(lapply(gsea_de, function(g) g$pathway[g$direction != "NS"])),
+          unlist(lapply(gsea_ds, function(g) g$pathway[g$significant]))) %in% kegg_ids$gene_set)
+if (has_kegg) {
+    source(file.path(report_dir, "kegg_overlay.R"))
+    kegg_out <- file.path(if (nzchar(tables_dir)) tables_dir else tempdir(), "kegg")
+    dir.create(kegg_out, showWarnings = FALSE, recursive = TRUE)
+    # strongest value per Entrez id
+    to_entrez <- function(gene_id, value) {
+        e <- ensembl_to_entrez(gene_id)
+        v <- setNames(value, e)[!is.na(e) & !is.na(value)]
+        v <- v[order(-abs(v))]
+        v[!duplicated(names(v))]
+    }
+    nice_limit <- function(x, step, floor_at) {
+        if (!length(x) || all(is.na(x))) return(floor_at)
+        max(floor_at, ceiling(max(abs(x), na.rm = TRUE) / step) * step)
+    }
+    for (ct in ct_levels) {
+        maps <- list(); missing <- character()
+        draw <- function(analysis, set, values, limit, key, caption) {
+            id  <- kegg_ids$kegg_id[match(set, kegg_ids$gene_set)]
+            out <- file.path(kegg_out, paste0(ct, "_", tolower(analysis), "_", id, ".png"))
+            title <- paste0(set, " (", id, "), ", ct, ": ", caption)
+            n <- kegg_map_png(values, id, kegg_cache, out, title = title, limit = limit, key_label = key)
+            if (is.null(n)) { missing <<- c(missing, id); return(NULL) }
+            data.frame(contrast = ct, analysis = analysis, pathway = set, kegg_id = id, file = basename(out),
+                       caption = paste0(caption, "; ", n[["with_value"]], " of ", n[["genes"]], " genes on the map coloured"))
+        }
+        # expression: significant KEGG sets from preranked GSEA
+        g <- gsea_de[[ct]]
+        if (!is.null(g) && ct %in% names(de)) {
+            sets <- g |> filter(direction != "NS", pathway %in% kegg_ids$gene_set) |> arrange(padj, desc(abs(NES))) |> head(kegg_top_n)
+            if (nrow(sets)) {
+                d <- de[[ct]] |> filter(direction != "NS")
+                v <- to_entrez(d$gene_id, d$logFC)
+                # colour scale per map: 98th percentile of |log2FC| of the map's DE genes, rounded up to 0.5
+                lim <- function(x) nice_limit(quantile(abs(x), 0.98, names = FALSE), 0.5, 1)
+                for (i in seq_len(nrow(sets))) {
+                    maps[[length(maps) + 1]] <- draw("Expression", sets$pathway[i], v, lim, "log2FC",
+                        sprintf("%s, NES %.2f, FDR %s", sets$direction[i], sets$NES[i], fmt_p(sets$padj[i])))
+                }
+            }
+        }
+        # splicing: KEGG sets over-represented among higher- and/or lower-inclusion genes
+        g <- gsea_ds[[ct]]
+        if (!is.null(g) && nrow(ds[[ct]])) {
+            sets <- g |> filter(significant, pathway %in% kegg_ids$gene_set) |>
+                group_by(pathway) |>
+                summarise(best = min(padj), lists = paste(paste0(gene_list, " FDR ", fmt_p(padj)), collapse = "; "), .groups = "drop") |>
+                arrange(best) |> head(kegg_top_n)
+            if (nrow(sets)) {
+                lead <- ds[[ct]] |> filter(direction != "NS") |> arrange(gene_id, desc(abs(dPSI))) |> distinct(gene_id, .keep_all = TRUE)
+                v <- to_entrez(lead$gene_id, lead$dPSI)
+                # colour scale per map: 98th percentile of |ΔPSI| of the map's spliced genes, rounded up to 0.1
+                lim <- function(x) min(1, nice_limit(quantile(abs(x), 0.98, names = FALSE), 0.1, 0.2))
+                for (i in seq_len(nrow(sets))) {
+                    maps[[length(maps) + 1]] <- draw("Splicing", sets$pathway[i], v, lim, "dPSI",   # the PNG font has no Δ
+                        paste0("over-represented among ", sets$lists[i]))
+                }
+            }
+        }
+        kegg_maps[[ct]] <- list(maps = bind_rows(maps), missing = unique(missing))
+        if (is.null(kegg_maps[[ct]]$maps) || !ncol(kegg_maps[[ct]]$maps))
+            kegg_maps[[ct]]$maps <- data.frame(contrast = character(), analysis = character(), pathway = character(),
+                                               kegg_id = character(), file = character(), caption = character())
+    }
+}
+```
+
+```{r kegg-pages, results='asis'}
+# One viewer page: the maps are PNG files in <tables>/kegg/, loaded by the browser when a pathway is
+# picked, so they are not embedded in the HTML (keep the _tables folder next to the report)
+if (has_kegg) {
+    cat(knit_page("child_kegg_viewer.Rmd"))
+}
+```
+
+
+```{r lookup-page, results='asis'}
+if (length(de) || has_ds) {
+    cat(knit_page("child_gene_lookup.Rmd"))
+}
+```
+
+
+Methods
+=====================================
+
+Row
+-------------------------------------
+
+### Methods
+
+```{r}
+ver <- function(tool) {
+    if (is.null(versions)) return("")
+    v <- versions$version[tolower(versions$tool) == tolower(tool)]
+    if (length(v)) paste0(" ", v[1]) else ""
+}
+htmltools::tagList(
+    tags$p("Reads were processed with ", tags$b("rnaseq-splice"),
+           ", a fork of nf-core/rnaseq that adds limma/voom differential expression and rMATS ",
+           "differential splicing. Reads were trimmed with Trim Galore", ver("trimgalore"),
+           ", aligned to the genome with STAR", ver("star"), " and quantified with Salmon", ver("salmon"),
+           " in alignment mode; duplicates were marked (not removed) with Picard", ver("picard"), "."),
+    tags$p(tags$b("Differential expression. "),
+           "Length-scaled gene counts (tximport) were filtered to genes with at least the configured minimum count ",
+           "in as many samples as the smallest condition group, then normalised with TMM and modelled with ",
+           "limma/voom (design ~ 0 + condition, one fit across all samples, one contrast per comparison). ",
+           "Genes with Benjamini–Hochberg adjusted p-value < ", fdr_de,
+           if (lfc_de > 0) paste0(" and |log2 fold change| > ", lfc_de) else "",
+           " are reported as differentially expressed",
+           if (lfc_de > 0) "." else "; no fold-change cut-off is applied."),
+    tags$p(tags$b("Differential splicing. "),
+           "rMATS", ver("rmats"), " was run per contrast on the duplicate-marked genome BAMs, with the treatment ",
+           "samples as group 1 and the control samples as group 2. Results use ",
+           if (params$rmats_counts == "JC") "junction counts only (JC)" else "junction and exon-body counts (JCEC)",
+           ". ",
+           if (rmats_filtered) paste0("Events were kept only if every sample had at least ", run_param("rmats_min_reads", 10),
+               " junction reads supporting the inclusion or skipping isoform, and the Benjamini–Hochberg FDR was ",
+               "recomputed over the kept events. ") else "",
+           "Events with FDR < ", fdr_ds, if (dpsi_ds > 0) paste0(" and |ΔPSI| > ", dpsi_ds) else "",
+           " are reported as differentially spliced", if (dpsi_ds > 0) ". " else "; no ΔPSI cut-off is applied. ",
+           "ΔPSI = PSI(treatment) − PSI(control). A gene is counted as differentially spliced when at least one ",
+           "of its events is significant."),
+    if (has_gsea) tags$p(tags$b("Gene set enrichment. "),
+           "Gene sets were tested with fgsea", ver("fgsea"), " against ",
+           paste(sort(unique(c(unlist(lapply(gsea_de, `[[`, "collection")), unlist(lapply(gsea_ds, `[[`, "collection"))))),
+                 collapse = ", "),
+           " (sets of ", run_param("gsea_min_size", 10), "–", run_param("gsea_max_size", 500), " genes). ",
+           "Expression: preranked GSEA (multilevel) of all tested genes ranked by the limma ",
+           if (run_param("gsea_rank_by", "t") == "t") "moderated t-statistic" else "log2 fold change",
+           ", after mapping Ensembl ids to gene symbols (one id per symbol, the one with the largest |statistic|); ",
+           "gene sets with BH-adjusted p < ", fdr_gs, " are Up (NES > 0) or Down (NES < 0). ",
+           "Splicing: over-representation analysis (fgsea::fora, hypergeometric test, BH-adjusted) of the genes with ",
+           "at least one significant rMATS event (FDR < ", run_param("gsea_splicing_fdr", 0.01),
+           if (as.numeric(run_param("gsea_splicing_dpsi", 0)) > 0) paste0(", |ΔPSI| > ", run_param("gsea_splicing_dpsi", 0)) else "",
+           "), separately for events with higher and with lower inclusion in the treatment group; the background is ",
+           "every gene with a tested rMATS event. Gene sets with BH-adjusted p < ", fdr_gs, " are reported as enriched.")
+)
+```
+
+### Software versions
+
+```{r}
+if (is.null(versions)) {
+    message_box("software_mqc_versions.yml was not found in pipeline_info/.")
+} else {
+    dt_table(versions, file_name = "software_versions", page_len = 25)
+}
+```
+
+```{r free-memory}
+# Free the result tables before pandoc packs the self-contained HTML (pandoc needs several GB for a
+# large report, and runs in the same R session's memory budget)
+rm(list = setdiff(ls(), "params"))
+invisible(gc())
+```

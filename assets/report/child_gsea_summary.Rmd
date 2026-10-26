@@ -1,0 +1,83 @@
+
+Summary {data-navmenu="Gene sets"}
+=====================================
+
+```{r}
+gs_de_cnt <- bind_rows(lapply(names(gsea_de), function(ct) {
+    data.frame(contrast = ct, up = sum(gsea_de[[ct]]$direction == "Up"), down = sum(gsea_de[[ct]]$direction == "Down"),
+               tested = nrow(gsea_de[[ct]]))
+}))
+gs_ds_cnt <- bind_rows(lapply(names(gsea_ds), function(ct) {
+    g <- gsea_ds[[ct]]
+    data.frame(contrast = ct,
+               hi = sum(g$significant & g$gene_list == "Higher inclusion"),
+               lo = sum(g$significant & g$gene_list == "Lower inclusion"))
+}))
+if (nrow(gs_de_cnt)) gs_de_cnt <- gs_de_cnt[order(match(gs_de_cnt$contrast, ct_levels)), ]
+if (nrow(gs_ds_cnt)) gs_ds_cnt <- gs_ds_cnt[order(match(gs_ds_cnt$contrast, ct_levels)), ]
+```
+
+Row {data-height=500}
+-------------------------------------
+
+### Gene sets regulated by expression (preranked GSEA, FDR < `r fdr_gs`)
+
+```{r}
+if (!nrow(gs_de_cnt)) {
+    message_box("No expression GSEA results were found (run the pipeline with --limma --gsea).")
+} else {
+    updown_barplot(gs_de_cnt$contrast, gs_de_cnt$up, gs_de_cnt$down,
+                   ylab = "Number of gene sets regulated", noun = "gene sets") |>
+        layout(title = list(text = paste0("GSEA ranked by limma ", run_param("gsea_rank_by", "t"),
+                                          "; FDR < ", fdr_gs), x = 0.02, font = list(size = 14)))
+}
+```
+
+### Gene sets over-represented among spliced genes (FDR < `r fdr_gs`)
+
+```{r}
+if (!nrow(gs_ds_cnt)) {
+    message_box("No splicing gene set results were found (run the pipeline with --rmats --gsea).")
+} else {
+    updown_barplot(gs_ds_cnt$contrast, gs_ds_cnt$hi, gs_ds_cnt$lo,
+                   up_name = "Higher-inclusion genes", down_name = "Lower-inclusion genes",
+                   ylab = "Number of gene sets enriched", legend_title = "Gene list", noun = "gene sets") |>
+        layout(title = list(text = paste0("Over-representation (fora); FDR < ", fdr_gs), x = 0.02, font = list(size = 14)))
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Gene sets regulated by expression, all contrasts (FDR < `r fdr_gs`)
+
+```{r}
+tab <- bind_rows(lapply(gsea_de, function(g) g[g$direction != "NS", ]))
+if (!nrow(tab)) {
+    message_box("No gene sets pass the cut-off.")
+} else {
+    tab <- tab |> arrange(match(contrast, ct_levels), padj, desc(abs(NES)))
+    capped_table(tab |> transmute(contrast, pathway, collection, direction, NES, padj, size, leading_edge_n,
+                                  leading_edge = first_genes(leading_edge)),
+                 "gsea_expression_significant.tsv", numeric_cols = "NES", sci_cols = "padj",
+                 full_df = tab)
+}
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Gene sets over-represented among spliced genes, all contrasts (FDR < `r fdr_gs`)
+
+```{r}
+tab <- bind_rows(lapply(gsea_ds, function(g) g[g$significant, ]))
+if (!nrow(tab)) {
+    message_box("No gene sets pass the cut-off.")
+} else {
+    tab <- tab |> arrange(match(contrast, ct_levels), padj)
+    capped_table(tab |> transmute(contrast, gene_list, pathway, collection, overlap, size, fold_enrichment, padj,
+                                  overlap_genes = first_genes(overlap_genes)),
+                 "gsea_splicing_significant.tsv", numeric_cols = "fold_enrichment", sci_cols = "padj",
+                 full_df = tab)
+}
+```

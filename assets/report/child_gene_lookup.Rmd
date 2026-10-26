@@ -1,0 +1,151 @@
+
+Gene lookup
+=====================================
+
+```{r lookup-data}
+# Compact per-gene data for the lookup page (drawn in the browser by gene_lookup.js)
+gl_cts <- intersect(ct_levels, union(names(de), names(ds)[vapply(ds, nrow, integer(1)) > 0]))
+gl_ids <- unique(c(if (!is.null(logcpm)) rownames(logcpm), unlist(lapply(de, `[[`, "gene_id")),
+                   unlist(lapply(ds, function(d) if (nrow(d)) d$gene_id))))
+gl_name_map <- bind_rows(gene_names, bind_rows(lapply(de, function(d) d |> select(gene_id, gene_name))),
+                         bind_rows(lapply(ds, function(d) if (nrow(d)) d |> select(gene_id, gene_name)))) |>
+    distinct(gene_id, .keep_all = TRUE)
+gl_names <- coalesce(gl_name_map$gene_name[match(gl_ids, gl_name_map$gene_id)], gl_ids)
+# Plot data only for genes significant in at least one contrast (DE, or with a significant splicing
+# event); the other genes are listed by name only, so a search for them says "not significant"
+gl_sig_ids <- unique(c(unlist(lapply(de, function(d) d$gene_id[d$direction != "NS"])),
+                       unlist(lapply(ds, function(d) if (nrow(d)) d$gene_id[d$direction != "NS"]))))
+gl_row  <- match(gl_ids, gl_sig_ids) - 1L          # 0-based row in the plot data, NA = not significant
+gl_ids_all <- gl_ids
+gl_ids  <- gl_sig_ids                              # the plot data below is built for these rows
+gl_samples <- intersect(sample_order, if (!is.null(logcpm)) colnames(logcpm) else sample_order)
+gl_expr <- if (!is.null(logcpm)) {
+    m <- matrix(NA_real_, length(gl_ids), length(gl_samples))
+    hit <- match(gl_ids, rownames(logcpm))
+    m[!is.na(hit), ] <- round(logcpm[hit[!is.na(hit)], gl_samples, drop = FALSE], 2)
+    m
+} else NULL
+per_ct <- function(get) {
+    sapply(gl_cts, function(ct) get(ct), simplify = "matrix")
+}
+gl_lfc <- per_ct(function(ct) if (ct %in% names(de)) round(de[[ct]]$logFC[match(gl_ids, de[[ct]]$gene_id)], 3) else rep(NA_real_, length(gl_ids)))
+gl_fdr <- per_ct(function(ct) if (ct %in% names(de)) signif(de[[ct]]$FDR[match(gl_ids, de[[ct]]$gene_id)], 3) else rep(NA_real_, length(gl_ids)))
+
+# Events: the top lookup_events_per_gene events of each gene (lowest FDR in any contrast, then largest |ΔPSI|)
+n_ev_gene <- as.integer(params$lookup_events_per_gene)
+gl_ev <- NULL
+if (n_ev_gene > 0 && has_ds) {
+    # significant events only (in at least one contrast) of the significant genes
+    sig_keys <- unique(unlist(lapply(gl_cts, function(ct) if (nrow(ds[[ct]])) ds[[ct]]$event_key[ds[[ct]]$direction != "NS"])))
+    all_ev <- bind_rows(lapply(gl_cts, function(ct) if (nrow(ds[[ct]]))
+        ds[[ct]] |> filter(!is.na(FDR), event_key %in% sig_keys, gene_id %in% gl_ids) |> select(event_key, event_type, gene_id, gene_name, location, dPSI, FDR, inc1, inc2) |>
+            mutate(contrast = ct)))
+    pick <- all_ev |> group_by(event_key) |>
+        summarise(gene_id = first(gene_id), event_type = first(event_type), location = first(location),
+                  min_FDR = min(FDR), max_abs = max(abs(dPSI)), .groups = "drop") |>
+        arrange(gene_id, min_FDR, desc(max_abs)) |>
+        group_by(gene_id) |> slice_head(n = n_ev_gene) |> ungroup()
+    sel <- all_ev |> filter(event_key %in% pick$event_key)
+    keys <- pick$event_key
+    psi <- matrix(NA_real_, length(keys), length(gl_samples), dimnames = list(keys, gl_samples))
+    dp  <- matrix(NA_real_, length(keys), length(gl_cts), dimnames = list(keys, gl_cts))
+    fd  <- dp
+    for (ct in gl_cts) {
+        e <- sel[sel$contrast == ct, ]
+        if (!nrow(e)) next
+        p <- event_psi(e, ct)
+        rownames(p) <- e$event_key
+        cols <- intersect(colnames(p), gl_samples)
+        cur  <- psi[e$event_key, cols, drop = FALSE]
+        psi[e$event_key, cols] <- ifelse(is.na(cur), p[, cols, drop = FALSE], cur)  # control samples recur per contrast
+        dp[e$event_key, ct] <- round(e$dPSI, 3)
+        fd[e$event_key, ct] <- signif(e$FDR, 3)
+    }
+    gl_ev <- list(gene = I(match(pick$gene_id, gl_ids) - 1L), type = I(pick$event_type), loc = I(pick$location),
+                  dpsi = unname(dp), fdr = unname(fd), psi = unname(round(psi, 3)))
+}
+gl_default <- local({
+    lead <- if (length(de)) de[[intersect(rev(ct_levels), names(de))[1]]] |> arrange(FDR) else NULL
+    if (!is.null(lead) && nrow(lead)) lead$gene_id[1] else gl_sig_ids[1]
+})
+gl_json <- jsonlite::toJSON(list(
+    # I(): keep one-element vectors as JSON arrays
+    gene_id = I(gl_ids_all), gene_name = I(gl_names), row = I(gl_row), samples = I(gl_samples), conds = I(unname(sample_cond[gl_samples])),
+    cond_order = I(cond_order), cond_cols = as.list(cond_cols), contrasts = I(gl_cts),
+    expr = gl_expr, lfc = unname(gl_lfc), fdr = unname(gl_fdr), ev = gl_ev,
+    fdr_de = fdr_de, lfc_de = lfc_de, fdr_ds = fdr_ds, dpsi_ds = dpsi_ds,
+    col_up = col_up, col_down = col_down, col_ns = col_ns, event_cols = as.list(event_cols),
+    de_rule = de_rule, ds_rule = ds_rule,
+    default_gene = match(gl_default, gl_ids_all) - 1L
+), na = "null", digits = NA, auto_unbox = TRUE, matrix = "rowmajor")
+gl_json <- gsub("</", "<\\/", gl_json, fixed = TRUE)
+# The data and the page script go in as a script file next to the page rather than as text in the
+# document body: pandoc embeds a file cheaply but needs several GB to parse megabytes of inline text
+gl_dep_dir <- file.path(tempdir(), "gene_lookup")
+dir.create(gl_dep_dir, showWarnings = FALSE)
+writeLines(c(paste0("window.GL_DATA = ", gl_json, ";"),
+             readLines(file.path(report_dir, "gene_lookup.js"), warn = FALSE)),
+           file.path(gl_dep_dir, "gene_lookup.js"))
+rm(gl_json, gl_expr, gl_lfc, gl_fdr, gl_ev)
+gl_dep <- htmltools::htmlDependency("gene-lookup", "1.0", src = c(file = gl_dep_dir), script = "gene_lookup.js")
+gl_box <- function(id, h = "100%") htmltools::div(id = id, class = "gl-plot", style = paste0("width:100%;height:", h, ";"))
+```
+
+Row {data-height=120}
+-------------------------------------
+
+### Find a gene (symbol or Ensembl id); plots are shown for genes significant in at least one contrast
+
+```{r}
+htmltools::tagList(
+    htmltools::tags$style(HTML("
+      #gl-bar { display:flex; gap:1em; align-items:center; flex-wrap:wrap; padding:0.3em 0.5em; }
+      #gl-input { font-size:1.1em; padding:0.25em 0.5em; width:16em; }
+      #gl-summary { color:#333; }
+      #gl-ev-table table { border-collapse:collapse; font-size:0.9em; width:100%; }
+      #gl-ev-table th, #gl-ev-table td { border-bottom:1px solid #ddd; padding:3px 8px; text-align:left; white-space:nowrap; }
+      #gl-ev-table td.sig { font-weight:bold; }
+      .gl-plot .gl-msg { padding:1em; color:#555; font-style:italic; }")),
+    htmltools::div(id = "gl-bar",
+        htmltools::tags$input(id = "gl-input", list = "gl-genes", placeholder = "e.g. MYC or ENSG00000136997",
+                              autocomplete = "off"),
+        htmltools::tags$datalist(id = "gl-genes"),
+        htmltools::span(id = "gl-summary")),
+    gl_dep
+)
+```
+
+Row {data-height=430}
+-------------------------------------
+
+### Expression per sample (voom log-CPM)
+
+```{r}
+gl_box("gl-expr")
+```
+
+### log2 fold change per contrast (filled = significant, `r de_rule`)
+
+```{r}
+gl_box("gl-lfc")
+```
+
+Row {data-height=480}
+-------------------------------------
+
+### PSI per sample of the gene's top `r params$lookup_events_per_gene` significant splicing events (lowest FDR in any contrast)
+
+```{r}
+gl_box("gl-psi")
+```
+
+Row {data-height=320}
+-------------------------------------
+
+### Splicing events: ΔPSI (FDR) per contrast; bold = significant (`r ds_rule`)
+
+```{r}
+htmltools::tagList(
+    htmltools::div(id = "gl-ev-table", style = "overflow:auto; height:100%;")
+)
+```

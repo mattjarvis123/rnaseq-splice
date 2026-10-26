@@ -1,0 +1,114 @@
+
+`r ct` {data-navmenu="DE by contrast"}
+=====================================
+
+```{r}
+d     <- de[[ct]]
+ct_row <- contrasts[contrasts$contrast == ct, ]
+n_up   <- sum(d$direction == "Up")
+n_down <- sum(d$direction == "Down")
+```
+
+Row {data-height=150}
+-------------------------------------
+
+### Up in `r ct_row$treatment` vs `r ct_row$control`
+
+```{r}
+valueBox(format(n_up, big.mark = ","), icon = "fa-arrow-up", color = col_up)
+```
+
+### Down in `r ct_row$treatment` vs `r ct_row$control`
+
+```{r}
+valueBox(format(n_down, big.mark = ","), icon = "fa-arrow-down", color = col_down)
+```
+
+### Genes tested
+
+```{r}
+valueBox(format(nrow(d), big.mark = ","), icon = "fa-dna", color = "#636363")
+```
+
+```{r}
+pd <- d |> mutate(neglog10 = round(-log10(pmax(P.Value, 1e-300)), 3), logFC = round(logFC, 3),
+                  AveExpr = round(AveExpr, 3), FDR = signif(FDR, 3),
+                  direction = factor(direction, levels = c("NS", "Down", "Up")))
+ps <- sample_points(pd, pd$direction != "NS")
+pd <- ps$df
+```
+
+Row {data-height=520}
+-------------------------------------
+
+### Volcano plot (`r de_rule``r ps$note`)
+
+```{r}
+plot_ly(pd, x = ~logFC, y = ~neglog10, color = ~direction,
+        colors = c(NS = col_ns, Down = col_down, Up = col_up),
+        text = ~gene_name, customdata = ~FDR, type = "scattergl", mode = "markers",
+        marker = list(size = 5, opacity = 0.7),
+        hovertemplate = "<b>%{text}</b><br>logFC %{x:.2f}<br>FDR %{customdata:.2e}<extra></extra>") |>
+    layout(xaxis = list(title = "log2 fold change"), yaxis = list(title = "-log10 p-value"),
+           legend = list(orientation = "h", y = 1.08)) |>
+    compact_plotly()
+```
+
+### MA plot`r ps$note`
+
+```{r}
+plot_ly(pd, x = ~AveExpr, y = ~logFC, color = ~direction,
+        colors = c(NS = col_ns, Down = col_down, Up = col_up),
+        text = ~gene_name, customdata = ~FDR, type = "scattergl", mode = "markers",
+        marker = list(size = 5, opacity = 0.7),
+        hovertemplate = "<b>%{text}</b><br>mean log-CPM %{x:.2f}<br>logFC %{y:.2f}<br>FDR %{customdata:.2e}<extra></extra>") |>
+    layout(xaxis = list(title = "Average log-CPM"), yaxis = list(title = "log2 fold change"),
+           legend = list(orientation = "h", y = 1.08)) |>
+    compact_plotly()
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### Differentially expressed genes (`r de_rule`)
+
+```{r}
+sig <- d |> filter(direction != "NS") |> arrange(FDR) |>
+    select(gene_id, gene_name, direction, logFC, AveExpr, t, P.Value, FDR)
+if (!nrow(sig)) {
+    message_box(paste0("No genes pass ", de_rule, " for this contrast."))
+} else {
+    capped_table(sig, paste0(ct, "_DE_genes.tsv"),
+                 numeric_cols = c("logFC", "AveExpr", "t"), sci_cols = c("P.Value", "FDR"))
+}
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Top `r min(params$heatmap_top_n, n_up + n_down)` DE genes (row z-scores of voom log-CPM)
+
+```{r}
+top <- d |> filter(direction != "NS") |> arrange(FDR) |> head(params$heatmap_top_n)
+hm_samples <- samples$sample[samples$condition %in% c(ct_row$treatment, ct_row$control)]
+hm_samples <- intersect(hm_samples[order(samples$condition[match(hm_samples, samples$sample)] != ct_row$control)],
+                        colnames(logcpm))
+if (nrow(top) < 2 || is.null(logcpm) || length(hm_samples) < 2) {
+    message_box("A heatmap needs at least two DE genes.")
+} else {
+    m <- logcpm[top$gene_id, hm_samples, drop = FALSE]
+    z <- row_z(m)
+    labels <- top$gene_name[match(rownames(z), top$gene_id)]
+    x_lab  <- paste0(hm_samples, " (", sample_cond[hm_samples], ")")
+    t_de   <- top[match(rownames(z), top$gene_id), ]
+    txt <- matrix(paste0("<b>", rep(labels, ncol(z)), "</b><br>", rep(x_lab, each = nrow(z)),
+                         "<br>log-CPM ", sprintf("%.2f", m), ", z = ", sprintf("%.2f", z),
+                         "<br>log2FC ", sprintf("%.2f", rep(t_de$logFC, ncol(z))),
+                         ", FDR ", rep(fmt_p(t_de$FDR), ncol(z))), nrow(z))
+    # rows clustered by Euclidean distance of their z-score profiles (complete linkage)
+    cluster_heatmap(z, x_lab, labels, txt, colorbar = list(title = list(text = "z", side = "top"),
+                    orientation = "h", x = 0.5, xanchor = "center", y = 1.02, yanchor = "bottom",
+                    len = 0.4, thickness = 12))$plot |>
+        layout(margin = list(b = 120, r = 10))
+}
+```

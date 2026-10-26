@@ -1,0 +1,101 @@
+
+KEGG maps
+=====================================
+
+```{r}
+km_all <- bind_rows(lapply(kegg_maps, `[[`, "maps"))
+km_missing <- unique(unlist(lapply(kegg_maps, `[[`, "missing")))
+km_cts <- intersect(ct_levels, unique(km_all$contrast))
+```
+
+Row {data-height=150}
+-------------------------------------
+
+### KEGG pathway maps for significant KEGG gene sets (gene set FDR < `r fdr_gs`; up to `r kegg_top_n` per contrast and analysis)
+
+```{r}
+htmltools::tagList(
+    tags$p(tags$b("Expression maps: "), "KEGG gene sets significant in the preranked GSEA. Genes are coloured by log2 fold change ",
+           "(orange = up, blue = down in the treatment); only differentially expressed genes (", de_rule, ") are coloured, the others stay white. ",
+           tags$b("Splicing maps: "), "KEGG gene sets over-represented among genes with higher- or lower-inclusion events, coloured by the ΔPSI ",
+           "of each gene's significant event with the largest |ΔPSI| (", ds_rule, "). Several genes on one node: the largest magnitude is shown."),
+    tags$p(style = "color:#555;", "The maps are not stored in this page: each one is loaded from ",
+           tags$code(paste0(tables_link, "/kegg/")), " when picked, so keep that folder next to the report."),
+    if (length(km_missing)) tags$p(style = "color:#b00;", "KEGG files could not be found or downloaded for: ",
+                                   paste(km_missing, collapse = ", "), ". Check the KEGG cache folder (", tags$code(kegg_cache), ").")
+)
+```
+
+Row {data-height=1000}
+-------------------------------------
+
+### Pathways {data-width=380}
+
+```{r}
+if (!nrow(km_all)) {
+    message_box("No significant KEGG gene sets in any contrast (gene sets need to come from MSigDB's KEGG collection, c2.cp.kegg_legacy).")
+} else {
+    sel <- function(id, label, choices) tags$label(style = "display:block;margin:0.3em 0;", label,
+        tags$select(id = id, style = "width:100%;", lapply(choices, function(x) tags$option(value = x, x))))
+    htmltools::tagList(
+        tags$div(style = "padding:0.3em 0.5em;",
+            sel("kv-contrast", "Contrast", km_cts),
+            sel("kv-analysis", "Analysis", c("Expression", "Splicing")),
+            tags$div(id = "kv-list", style = "margin-top:0.5em;")),
+        tags$script(type = "application/json", id = "kv-data",
+                    htmltools::HTML(jsonlite::toJSON(km_all, dataframe = "rows"))),
+        tags$script(htmltools::HTML(sprintf('
+window.addEventListener("load", function() {
+  var maps = JSON.parse(document.getElementById("kv-data").textContent);
+  var dir = %s;
+  var ctSel = document.getElementById("kv-contrast"), anSel = document.getElementById("kv-analysis");
+  function show(m, btn) {
+    document.querySelectorAll(".kv-item").forEach(function(b) { b.style.background = ""; b.style.fontWeight = ""; });
+    if (btn) { btn.style.background = "#e8eefb"; btn.style.fontWeight = "bold"; }
+    var url = dir + encodeURIComponent(m.file);
+    document.getElementById("kv-title").textContent = m.contrast + " | " + m.analysis + ": " + m.pathway + " (" + m.kegg_id + ")";
+    document.getElementById("kv-caption").textContent = m.caption;
+    document.getElementById("kv-link").href = url;
+    var img = document.getElementById("kv-img");
+    img.style.display = "";
+    document.getElementById("kv-error").style.display = "none";
+    img.src = url;
+  }
+  function refresh() {
+    var list = document.getElementById("kv-list"); list.innerHTML = "";
+    var hits = maps.filter(function(m) { return m.contrast === ctSel.value && m.analysis === anSel.value; });
+    if (!hits.length) { list.innerHTML = "<p style=\\"color:#777;font-style:italic;\\">No significant KEGG sets for this contrast and analysis.</p>"; return; }
+    hits.forEach(function(m, i) {
+      var b = document.createElement("button");
+      b.className = "kv-item"; b.type = "button";
+      b.style.cssText = "display:block;width:100%%;text-align:left;margin:2px 0;padding:4px 6px;border:1px solid #ddd;border-radius:3px;background:none;font-size:12px;";
+      b.textContent = m.pathway.replace(/^KEGG_/, "").replace(/_/g, " ").toLowerCase() + " (" + m.kegg_id + ")";
+      b.title = m.caption;
+      b.onclick = function() { show(m, b); };
+      list.appendChild(b);
+      if (i === 0) show(m, b);
+    });
+  }
+  ctSel.onchange = refresh; anSel.onchange = refresh;
+  document.getElementById("kv-img").onerror = function() {
+    this.style.display = "none";
+    document.getElementById("kv-error").style.display = "";
+  };
+  refresh();
+});', jsonlite::toJSON(paste0(tables_link, "/kegg/"), auto_unbox = TRUE))))
+    )
+}
+```
+
+### Map {data-width=1020}
+
+```{r}
+tags$div(style = "height:100%;overflow:auto;",
+    tags$p(style = "margin:0.2em 0.5em;", tags$b(id = "kv-title", "Pick a pathway on the left")),
+    tags$p(style = "margin:0.2em 0.5em;color:#555;", tags$span(id = "kv-caption"), " ",
+           tags$a(id = "kv-link", href = "#", target = "_blank", "open full size")),
+    tags$p(id = "kv-error", style = "display:none;margin:0.5em;color:#b00;",
+           "The map image could not be loaded. Keep the folder ", tags$code(paste0(tables_link, "/kegg/")),
+           " in the same place as this report file."),
+    tags$img(id = "kv-img", alt = "", style = "max-width:100%;height:auto;"))
+```
