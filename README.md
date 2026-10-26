@@ -165,10 +165,25 @@ The [example report](https://mattjarvis123.github.io/rnaseq-splice/) shows the r
 
 ## Running on a cluster or shared storage
 
-Use `-profile apptainer` (or `singularity`) on HPC systems, and set resource limits for your machine with `-c`.
-Example configs for a laptop and for a shared server or cluster are in [conf/examples/](conf/examples/), and
-[docs/splice_usage.md](docs/splice_usage.md#running-on-a-cluster-or-shared-storage) covers network storage, work folders
-and container caches.
+The pipeline runs on a laptop, a shared server or an HPC cluster with the **SLURM** or **PBS** (PBS Pro, Torque/OpenPBS)
+scheduler, where Nextflow submits every task as its own job. Ready-to-edit templates are in
+[conf/examples/](conf/examples/):
+
+| Template                                       | For                                                       |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| `local_docker.config`                          | Laptop or workstation with Docker                         |
+| `server_apptainer.config`                      | Shared Linux server without a scheduler, with Apptainer   |
+| `slurm_apptainer.config` + `submit_slurm.sh`   | SLURM cluster with Apptainer                              |
+| `pbs_apptainer.config` + `submit_pbs.sh`       | PBS Pro or Torque/OpenPBS cluster with Apptainer          |
+
+```bash
+# SLURM: edit the partition, account and paths, then submit the pipeline's head job
+sbatch submit_slurm.sh
+```
+
+Institutional profiles from [nf-core/configs](https://github.com/nf-core/configs) also work (`-profile <institution>`).
+[docs/splice_usage.md](docs/splice_usage.md#running-on-a-cluster-or-shared-storage) covers shared filesystems,
+container caches, compute nodes without internet access and network storage.
 
 ## Repository layout
 

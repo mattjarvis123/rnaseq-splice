@@ -20,8 +20,9 @@ runs as nf-core/rnaseq 3.27.0.
   over-representation analysis of differentially spliced genes.
 - HTML results report as the final step (`RNASEQ_SPLICE_REPORT`, `--skip_report` to turn off), with QC, sample
   structure, DE and splicing pages, cross-contrast views, gene set results, KEGG pathway maps and a gene lookup.
-- `test_rmats` profile; documentation in `docs/splice_usage.md` and `docs/splice_output.md`; example configs in
-  `conf/examples/`.
+- `test_rmats` profile; documentation in `docs/splice_usage.md` and `docs/splice_output.md`.
+- Example configs in `conf/examples/` for a Docker workstation, a shared server, and SLURM and PBS clusters with
+  Apptainer, with head-job submission scripts (`submit_slurm.sh`, `submit_pbs.sh`).
 
 ### Changed
 

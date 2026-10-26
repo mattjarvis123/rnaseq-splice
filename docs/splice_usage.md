@@ -181,27 +181,61 @@ A parameters file is the recommended way to run the pipeline anyway: it records 
 
 ## Running on a cluster or shared storage
 
-Use `-profile apptainer` (or `singularity`) where Docker is not available, and give Nextflow a config with the resources
-of your machine:
+The pipeline runs anywhere Nextflow does. Where Docker is not available, use `-profile apptainer` (or `singularity`),
+and give Nextflow a config describing your machine or scheduler with `-c`. Templates are in
+[`conf/examples/`](../conf/examples/):
+
+| File                      | For                                                                     |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `local_docker.config`     | A laptop or workstation with Docker.                                    |
+| `server_apptainer.config` | One shared Linux server without a scheduler; tasks run on the server.   |
+| `slurm_apptainer.config`  | A SLURM cluster; every task is submitted as a SLURM job.                |
+| `pbs_apptainer.config`    | A PBS Pro or Torque/OpenPBS cluster; every task is submitted as a PBS job. |
+| `submit_slurm.sh`, `submit_pbs.sh` | Job scripts that start the pipeline itself on a SLURM or PBS cluster. |
+
+Copy the file you need, replace the paths, queue or partition, account and resource limits, and pass it with `-c`.
+If your institution has a profile in [nf-core/configs](https://github.com/nf-core/configs), you can use it instead:
+`-profile <institution>` loads it as for any nf-core pipeline.
+
+### SLURM and PBS clusters
+
+Nextflow submits every task as its own job, requesting the CPUs, memory and time of the task's resource label
+(`process_low`, `process_medium`, `process_high` and so on, set in `conf/base.config` and capped by
+`process.resourceLimits`). The pipeline itself runs as a small, long "head" job:
 
 ```bash
-nextflow run mattjarvis123/rnaseq-splice -profile apptainer -c server.config -params-file params.yaml
+sbatch submit_slurm.sh   # SLURM
+qsub submit_pbs.sh       # PBS Pro or Torque/OpenPBS
 ```
 
-Templates are in [`conf/examples/`](../conf/examples/): `local_docker.config` for a laptop or workstation and
-`hpc_apptainer.config` for a shared server or a cluster scheduler. Points to plan for:
+or from a login node inside `screen` or `tmux`, if your cluster allows long-running processes there. Points to check:
 
-- **Resources.** A human STAR index needs about 32–38 GB of memory. Set `process.resourceLimits` to what the machine (or
-  your share of it) can give.
+- **Shared filesystem.** The work folder (`-w`), the container cache and the inputs must be on storage that every
+  compute node can see, such as cluster scratch, Lustre, GPFS or NFS.
+- **Containers.** Nextflow downloads each container image once, from the node running the head job, into the shared
+  cache (`apptainer.cacheDir` or `NXF_APPTAINER_CACHEDIR`); compute nodes then read the images from the cache. The head
+  job's node therefore needs internet access, or the cache must be filled beforehand from one that has it.
+- **Limits.** Keep `process.resourceLimits` within what your partition or queue allows: a task that asks for more than
+  the queue maximum stays pending. A human STAR index needs about 32–38 GB of memory.
+- **KEGG maps.** The report downloads KEGG map files when they are not in `--report_kegg_cache`. Compute nodes often
+  have no internet access, so fill a shared cache first with `assets/report/fetch_kegg_cache.sh <folder>` from a node
+  that does, and pass that folder. Missing maps are listed in the report rather than failing the run.
+- **Scheduler friendliness.** `executor.queueSize` and `executor.submitRateLimit` in the templates limit how many jobs
+  are queued and how fast they are submitted.
+
+### A single server or network storage
+
+- **Resources.** Set `process.resourceLimits` (largest single task) and `executor.cpus` / `executor.memory` (everything
+  running at once) to your share of the machine.
 - **Disk space.** The work folder needs roughly 3–5 times the size of the FASTQ files. Delete it after a successful run
   once you no longer need `-resume`.
 - **Network storage (NAS, SMB/CIFS).** Nextflow creates symbolic links in every task folder. An SMB/CIFS mount without
   the `mfsymlinks` option cannot hold them, so either mount with `mfsymlinks` or put the work folder (`-w`) on local disk.
   Keep the launch folder, where Nextflow writes `.nextflow/` and its logs, on local disk too: Nextflow's run history
-  relies on file locking, which is unreliable over SMB. Input files can stay on the network share.
-- **Container cache.** Set `NXF_APPTAINER_CACHEDIR` (or `apptainer.cacheDir`) to a local folder that is kept between runs,
-  so container images are downloaded once.
-- **Long runs.** Start the pipeline inside `screen` or `tmux`, or submit it as a job, so it survives a lost connection.
+  relies on file locking, which is unreliable over SMB. Input files and `--outdir` can stay on the network share.
+- **Container cache.** Set `apptainer.cacheDir` (or `NXF_APPTAINER_CACHEDIR`) to a local folder that is kept between
+  runs, so container images are downloaded once.
+- **Long runs.** Start the pipeline inside `screen` or `tmux` so it survives a lost connection.
 
 ## Test profile
 
