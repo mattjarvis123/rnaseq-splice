@@ -6,15 +6,15 @@
 
     <meta
       name="description"
-      content="nf-core/rnaseq: RNA sequencing analysis pipeline for gene/isoform quantification and extensive quality control."
+      content="rnaseq-splice: RNA-seq pipeline with differential expression, splicing and gene set enrichment, built on rnaseq-splice."
     />
-    <title>nf-core/rnaseq Pipeline Report</title>
+    <title>rnaseq-splice Pipeline Report</title>
   </head>
   <body>
     <div style="font-family: Helvetica, Arial, sans-serif; padding: 30px; max-width: 800px; margin: 0 auto">
       <img src="cid:nfcorepipelinelogo" />
 
-      <h1>nf-core/rnaseq ${version}</h1>
+      <h1>rnaseq-splice ${version}</h1>
       <h2>Run Name: $runName</h2>
 
       <% if (!success){ out << """
@@ -29,7 +29,7 @@
           border-radius: 4px;
         "
       >
-        <h4 style="margin-top: 0; color: inherit">nf-core/rnaseq execution completed unsuccessfully!</h4>
+        <h4 style="margin-top: 0; color: inherit">rnaseq-splice execution completed unsuccessfully!</h4>
         <p>The exit status of the task that caused the workflow execution to fail was: <code>$exitStatus</code>.</p>
         <p>The full error message was:</p>
         <pre style="white-space: pre-wrap; overflow: visible; margin-bottom: 0">${errorReport}</pre>
@@ -46,7 +46,7 @@
           border-radius: 4px;
         "
       >
-        nf-core/rnaseq execution completed successfully!
+        rnaseq-splice execution completed successfully!
       </div>
       """ } %>
 
@@ -81,8 +81,8 @@ $commandLine</pre
         </tbody>
       </table>
 
-      <p>nf-core/rnaseq</p>
-      <p><a href="https://github.com/nf-core/rnaseq">https://github.com/nf-core/rnaseq</a></p>
+      <p>rnaseq-splice</p>
+      <p><a href="https://github.com/mattjarvis123/rnaseq-splice">https://github.com/mattjarvis123/rnaseq-splice</a></p>
     </div>
   </body>
 </html>

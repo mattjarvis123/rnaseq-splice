@@ -1,13 +1,13 @@
-id: "nf-core-rnaseq-methods-description"
+id: "rnaseq-splice-methods-description"
 description: "Suggested text and references to use when describing pipeline usage within the methods section of a publication."
-section_name: "nf-core/rnaseq Methods Description"
-section_href: "https://github.com/nf-core/rnaseq"
+section_name: "rnaseq-splice Methods Description"
+section_href: "https://github.com/mattjarvis123/rnaseq-splice"
 plot_type: "html"
 ## TODO nf-core: Update the HTML below to your preferred methods description, e.g. add publication citation for this pipeline
 ## You inject any metadata in the Nextflow '${workflow}' object
 data: |
   <h4>Methods</h4>
-  <p>Data was processed using nf-core/rnaseq v${workflow.manifest.version} ${doi_text} of the nf-core collection of workflows (<a href="https://doi.org/10.1038/s41587-020-0439-x">Ewels <em>et al.</em>, 2020</a>), utilising reproducible software environments from the Bioconda (<a href="https://doi.org/10.1038/s41592-018-0046-7">Grüning <em>et al.</em>, 2018</a>) and Biocontainers (<a href="https://doi.org/10.1093/bioinformatics/btx192">da Veiga Leprevost <em>et al.</em>, 2017</a>) projects.</p>
+  <p>Data was processed using rnaseq-splice v${workflow.manifest.version} ${doi_text}, built on nf-core/rnaseq 3.27.0 (<a href="https://doi.org/10.5281/zenodo.1400710">doi: 10.5281/zenodo.1400710</a>) and nf-core/rnasplice 2.0.0 from the nf-core collection of workflows (<a href="https://doi.org/10.1038/s41587-020-0439-x">Ewels <em>et al.</em>, 2020</a>), utilising reproducible software environments from the Bioconda (<a href="https://doi.org/10.1038/s41592-018-0046-7">Grüning <em>et al.</em>, 2018</a>) and Biocontainers (<a href="https://doi.org/10.1093/bioinformatics/btx192">da Veiga Leprevost <em>et al.</em>, 2017</a>) projects.</p>
   <p>The pipeline was executed with Nextflow v${workflow.nextflow.version} (<a href="https://doi.org/10.1038/nbt.3820">Di Tommaso <em>et al.</em>, 2017</a>) with the following command:</p>
   <pre><code>${workflow.commandLine}</code></pre>
   <p>${tool_citations}</p>

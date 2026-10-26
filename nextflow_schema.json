@@ -1,8 +1,8 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/nf-core/rnaseq/master/nextflow_schema.json",
-    "title": "nf-core/rnaseq pipeline parameters",
-    "description": "RNA sequencing analysis pipeline for gene/isoform quantification and extensive quality control.",
+    "$id": "https://raw.githubusercontent.com/mattjarvis123/rnaseq-splice/main/nextflow_schema.json",
+    "title": "rnaseq-splice pipeline parameters",
+    "description": "RNA-seq pipeline built on nf-core/rnaseq 3.27.0, adding limma/voom differential expression, rMATS differential splicing (from nf-core/rnasplice 2.0.0), fgsea gene set enrichment and an HTML results report.",
     "type": "object",
     "$defs": {
         "input_output_options": {

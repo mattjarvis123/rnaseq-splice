@@ -1,4 +1,4 @@
-# nf-core/rnaseq: Citations
+# rnaseq-splice: Citations
 
 ## [nf-core](https://pubmed.ncbi.nlm.nih.gov/32055031/)
 

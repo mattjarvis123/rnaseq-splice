@@ -55,20 +55,19 @@ workflow PIPELINE_INITIALISATION {
     def colors = logColours(monochrome_logs)
     def before_text = """
 -${colors.dim}----------------------------------------------------${colors.reset}-
-                                        ${colors.green},--.${colors.black}/${colors.green},-.${colors.reset}
-${colors.blue}        ___     __   __   __   ___     ${colors.green}/,-._.--~\'${colors.reset}
-${colors.blue}  |\\ | |__  __ /  ` /  \\ |__) |__         ${colors.yellow}}  {${colors.reset}
-${colors.blue}  | \\| |       \\__, \\__/ |  \\ |___     ${colors.green}\\`-._,-`-,${colors.reset}
-                                        ${colors.green}`._,._,\'${colors.reset}
-${colors.purple}  nf-core/rnaseq ${workflow.manifest.version}${colors.reset}
+${colors.purple}  rnaseq-splice ${workflow.manifest.version}${colors.reset}
+${colors.dim}  built on nf-core/rnaseq 3.27.0 and nf-core/rnasplice 2.0.0${colors.reset}
 -${colors.dim}----------------------------------------------------${colors.reset}-
 """
     def after_text = """${workflow.manifest.doi ? "\n* The pipeline\n" : ""}${workflow.manifest.doi.tokenize(",").collect { doi -> "    https://doi.org/${doi.trim().replace('https://doi.org/','')}"}.join("\n")}${workflow.manifest.doi ? "\n" : ""}
+* nf-core/rnaseq, on which this pipeline is built
+    https://doi.org/10.5281/zenodo.1400710
+
 * The nf-core framework
     https://doi.org/10.1038/s41587-020-0439-x
 
 * Software dependencies
-    https://github.com/nf-core/rnaseq/blob/master/CITATIONS.md
+    https://github.com/mattjarvis123/rnaseq-splice/blob/main/CITATIONS.md
 """
     if (monochrome_logs) {
         before_text = before_text.replaceAll(/\033\[[0-9;]*m/, '')
