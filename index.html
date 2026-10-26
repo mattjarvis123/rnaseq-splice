@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rnaseq-splice: example output</title>
+<meta name="description" content="Example results report from rnaseq-splice, a Nextflow RNA-seq pipeline for differential expression, differential splicing and gene set enrichment, run on ENCODE U2AF2 knockdown data.">
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f6f7f9; --text: #1d2330; --muted: #5a6475; --border: #e1e5eb;
+    --accent: #1f6feb; --accent-text: #ffffff; --accent-soft: #e8f0fe; --code: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1218; --surface: #171b23; --text: #e6e9ef; --muted: #9aa4b5; --border: #2a303b;
+      --accent: #4b8ef7; --accent-text: #0b0d12; --accent-soft: #1b2638; --code: #1f2530;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+  header { padding: 56px 0 32px; border-bottom: 1px solid var(--border); }
+  .eyebrow { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  h1 { font-size: 34px; line-height: 1.2; margin: 0 0 12px; }
+  h2 { font-size: 21px; margin: 40px 0 12px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 18px; color: var(--muted); max-width: 680px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+  .btn { display: inline-block; padding: 11px 18px; border-radius: 8px; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-text); }
+  .btn.secondary { color: var(--accent); }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .note { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  a { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat .num { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 13px; color: var(--muted); }
+  ul { padding-left: 20px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  code { background: var(--code); padding: 1px 6px; border-radius: 4px; font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0 16px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .refs { font-size: 14px; color: var(--muted); }
+  .refs li { margin-bottom: 8px; }
+  footer { margin: 48px 0 0; padding: 24px 0 40px; border-top: 1px solid var(--border); font-size: 14px; color: var(--muted); }
+  @media (max-width: 520px) { h1 { font-size: 27px; } header { padding-top: 36px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <p class="eyebrow">rnaseq-splice · example output</p>
+    <h1>U2AF2 knockdown in K562 and HepG2 cells</h1>
+    <p class="lead">A results report produced by <a href="https://github.com/mattjarvis123/rnaseq-splice">rnaseq-splice</a>,
+      a Nextflow pipeline that takes bulk RNA-seq from FASTQ files to differential expression, differential splicing,
+      gene set enrichment and an interactive report in one run. The data are public ENCODE knockdowns of the core
+      splicing factor U2AF2, used as a positive control.</p>
+    <div class="actions">
+      <a class="btn primary" href="report/encode_U2AF2_K562_HepG2_report.html">Open the report</a>
+      <a class="btn secondary" href="https://github.com/mattjarvis123/rnaseq-splice">View the pipeline on GitHub</a>
+    </div>
+    <p class="note">The report is a single 18&nbsp;MB HTML file that runs in your browser; allow a few seconds for it to load.
+      Its full result tables are in <a href="report/encode_U2AF2_K562_HepG2_report_tables/">the tables folder</a>.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <h2>The experiment</h2>
+  <p>U2AF2 (U2AF65) recognises the polypyrimidine tract at 3' splice sites, so knocking it down should change
+    splicing widely. ENCODE knocked it down with shRNA in two cell lines and sequenced two replicates per condition.</p>
+  <table>
+    <thead><tr><th>Contrast</th><th>Cell line</th><th>Samples</th><th>ENCODE experiment</th></tr></thead>
+    <tbody>
+      <tr><td><code>K562_U2AF2_KD_vs_control</code></td><td>K562</td><td>2 knockdown, 2 control shRNA</td>
+        <td><a href="https://www.encodeproject.org/experiments/ENCSR904CJQ/">ENCSR904CJQ</a></td></tr>
+      <tr><td><code>HepG2_U2AF2_KD_vs_control</code></td><td>HepG2</td><td>2 knockdown, 2 control shRNA</td>
+        <td><a href="https://www.encodeproject.org/experiments/ENCSR426UUG/">ENCSR426UUG</a></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Results at a glance</h2>
+  <p>At the report's default cut-offs (adjusted p-value or FDR &lt; 0.01, no fold-change or ΔPSI cut-off; rMATS events
+    with at least 10 junction reads in every sample):</p>
+  <div class="grid">
+    <div class="stat"><div class="num">5,220</div><div class="lbl">spliced events, K562</div></div>
+    <div class="stat"><div class="num">8,600</div><div class="lbl">spliced events, HepG2</div></div>
+    <div class="stat"><div class="num">121</div><div class="lbl">DE genes, K562</div></div>
+    <div class="stat"><div class="num">3,835</div><div class="lbl">DE genes, HepG2</div></div>
+  </div>
+  <p>Splicing changes far outweigh expression changes in K562, as expected when a core splicing factor is depleted.</p>
+
+  <h2>What the report contains</h2>
+  <ul>
+    <li><strong>QC and sample structure:</strong> read and mapping statistics, PCA and sample correlation.</li>
+    <li><strong>Differential expression:</strong> volcano and MA plots, searchable tables and heatmaps (limma/voom).</li>
+    <li><strong>Differential splicing:</strong> ΔPSI volcano plots, event types and per-sample PSI heatmaps (rMATS).</li>
+    <li><strong>DE × splicing and across contrasts:</strong> genes that change in expression, splicing or both, and how
+      the two cell lines compare.</li>
+    <li><strong>Gene sets:</strong> preranked GSEA of expression and over-representation among spliced genes, against
+      MSigDB Hallmark, Reactome and KEGG gene sets, with KEGG pathway maps.</li>
+    <li><strong>Gene lookup:</strong> any gene's expression and splicing across samples and contrasts.</li>
+  </ul>
+
+  <h2>Validation</h2>
+  <p>The pipeline's results were compared with ENCODE's own processed differential expression and rMATS results for the
+    same experiments. In K562, log2 fold changes agreed with ENCODE's at r&nbsp;=&nbsp;0.87 and ΔPSI values of matched
+    splicing events at r&nbsp;=&nbsp;0.96–0.98, with the pipeline detecting more significant genes and events than
+    ENCODE's older tool versions.</p>
+
+  <h2>How it was made</h2>
+  <p>rnaseq-splice (pre-release, built on nf-core/rnaseq 3.27.0) with STAR and Salmon, rMATS 4.3.0 with the read-coverage
+    filter, limma/voom, and fgsea against MSigDB 2026.2 gene sets, run on a Linux server with Apptainer. See the
+    <a href="https://github.com/mattjarvis123/rnaseq-splice#readme">README</a> for the pipeline and how to run it on your
+    own data.</p>
+
+  <h2>Data, software and credits</h2>
+  <ul class="refs">
+    <li>RNA-seq data: the ENCODE Project. Van Nostrand EL, <em>et al.</em> A large-scale binding and functional map of
+      human RNA-binding proteins. <em>Nature</em> 2020;583:711–719.
+      <a href="https://doi.org/10.1038/s41586-020-2077-3">doi:10.1038/s41586-020-2077-3</a></li>
+    <li>KEGG pathway maps: Kanehisa M, Goto S. KEGG: Kyoto Encyclopedia of Genes and Genomes. <em>Nucleic Acids Res.</em>
+      2000;28:27–30. <a href="https://doi.org/10.1093/nar/28.1.27">doi:10.1093/nar/28.1.27</a>. KEGG maps are © Kanehisa
+      Laboratories and are shown here, with citation, for non-commercial demonstration
+      (<a href="https://www.kegg.jp/kegg/legal.html">KEGG terms</a>).</li>
+    <li>Gene sets: MSigDB. Liberzon A, <em>et al.</em> <em>Cell Syst.</em> 2015;1:417–425.
+      <a href="https://doi.org/10.1016/j.cels.2015.12.004">doi:10.1016/j.cels.2015.12.004</a></li>
+    <li>Pipeline foundations: <a href="https://github.com/nf-core/rnaseq">nf-core/rnaseq</a> and
+      <a href="https://github.com/nf-core/rnasplice">nf-core/rnasplice</a>. All tools are listed in
+      <a href="https://github.com/mattjarvis123/rnaseq-splice/blob/main/CITATIONS.md">CITATIONS.md</a>.</li>
+  </ul>
+</main>
+
+<footer>
+  <div class="wrap">rnaseq-splice by <a href="https://github.com/mattjarvis123">Matt Jarvis</a> · MIT licensed ·
+    <a href="https://github.com/mattjarvis123/rnaseq-splice">github.com/mattjarvis123/rnaseq-splice</a></div>
+</footer>
+</body>
+</html>
