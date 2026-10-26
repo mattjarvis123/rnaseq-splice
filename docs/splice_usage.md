@@ -185,13 +185,13 @@ The pipeline runs anywhere Nextflow does. Where Docker is not available, use `-p
 and give Nextflow a config describing your machine or scheduler with `-c`. Templates are in
 [`conf/examples/`](../conf/examples/):
 
-| File                      | For                                                                     |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `local_docker.config`     | A laptop or workstation with Docker.                                    |
-| `server_apptainer.config` | One shared Linux server without a scheduler; tasks run on the server.   |
-| `slurm_apptainer.config`  | A SLURM cluster; every task is submitted as a SLURM job.                |
-| `pbs_apptainer.config`    | A PBS Pro or Torque/OpenPBS cluster; every task is submitted as a PBS job. |
-| `submit_slurm.sh`, `submit_pbs.sh` | Job scripts that start the pipeline itself on a SLURM or PBS cluster. |
+| File                               | For                                                                        |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `local_docker.config`              | A laptop or workstation with Docker.                                       |
+| `server_apptainer.config`          | One shared Linux server without a scheduler; tasks run on the server.      |
+| `slurm_apptainer.config`           | A SLURM cluster; every task is submitted as a SLURM job.                   |
+| `pbs_apptainer.config`             | A PBS Pro or Torque/OpenPBS cluster; every task is submitted as a PBS job. |
+| `submit_slurm.sh`, `submit_pbs.sh` | Job scripts that start the pipeline itself on a SLURM or PBS cluster.      |
 
 Copy the file you need, replace the paths, queue or partition, account and resource limits, and pass it with `-c`.
 If your institution has a profile in [nf-core/configs](https://github.com/nf-core/configs), you can use it instead:

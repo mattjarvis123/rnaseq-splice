@@ -34,17 +34,17 @@ contrast name from the contrasts sheet.
 
 Each row of a `*.MATS.*.txt` table is one splicing event. The most useful columns are:
 
-| Column                       | Meaning                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `GeneID`, `geneSymbol`       | Gene of the event.                                                                                   |
-| `chr`, `strand` and exon coordinates | Location of the event (0-based starts). The coordinate columns differ by event type.         |
-| `IJC_SAMPLE_1`, `SJC_SAMPLE_1` | Inclusion and skipping junction counts in the treatment samples, comma-separated in samplesheet order. |
-| `IJC_SAMPLE_2`, `SJC_SAMPLE_2` | The same for the control samples.                                                                  |
-| `IncLevel1`, `IncLevel2`     | Per-sample PSI (percent spliced in, 0–1) in the treatment and control samples.                       |
-| `IncLevelDifference`         | ΔPSI, mean treatment PSI minus mean control PSI.                                                     |
-| `PValue`, `FDR`              | rMATS test p-value and FDR. In `filtered/`, `FDR` is recomputed over the kept events.                |
-| `min_replicate_reads`        | `filtered/` only: smallest inclusion + skipping read count across all replicates.                    |
-| `FDR_unfiltered`             | `filtered/` only: rMATS's original FDR.                                                              |
+| Column                               | Meaning                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `GeneID`, `geneSymbol`               | Gene of the event.                                                                                     |
+| `chr`, `strand` and exon coordinates | Location of the event (0-based starts). The coordinate columns differ by event type.                   |
+| `IJC_SAMPLE_1`, `SJC_SAMPLE_1`       | Inclusion and skipping junction counts in the treatment samples, comma-separated in samplesheet order. |
+| `IJC_SAMPLE_2`, `SJC_SAMPLE_2`       | The same for the control samples.                                                                      |
+| `IncLevel1`, `IncLevel2`             | Per-sample PSI (percent spliced in, 0–1) in the treatment and control samples.                         |
+| `IncLevelDifference`                 | ΔPSI, mean treatment PSI minus mean control PSI.                                                       |
+| `PValue`, `FDR`                      | rMATS test p-value and FDR. In `filtered/`, `FDR` is recomputed over the kept events.                  |
+| `min_replicate_reads`                | `filtered/` only: smallest inclusion + skipping read count across all replicates.                      |
+| `FDR_unfiltered`                     | `filtered/` only: rMATS's original FDR.                                                                |
 
 The rMATS documentation describes every column: [rMATS-turbo output](https://github.com/Xinglab/rmats-turbo#output).
 
@@ -68,15 +68,15 @@ The rMATS documentation describes every column: [rMATS-turbo output](https://git
 
 `<contrast>.limma.results.tsv` has one row per gene:
 
-| Column      | Meaning                                                                   |
-| ----------- | ------------------------------------------------------------------------- |
-| `gene_id`   | Gene id from the GTF (Ensembl id for GENCODE or Ensembl annotation).      |
-| `logFC`     | log2 fold change, treatment minus control.                                |
-| `AveExpr`   | Average log2-CPM across all samples.                                      |
-| `t`         | Moderated t statistic (used to rank genes for GSEA).                      |
-| `P.Value`   | p-value.                                                                  |
-| `adj.P.Val` | Benjamini-Hochberg adjusted p-value.                                      |
-| `B`         | log-odds that the gene is differentially expressed.                       |
+| Column      | Meaning                                                              |
+| ----------- | -------------------------------------------------------------------- |
+| `gene_id`   | Gene id from the GTF (Ensembl id for GENCODE or Ensembl annotation). |
+| `logFC`     | log2 fold change, treatment minus control.                           |
+| `AveExpr`   | Average log2-CPM across all samples.                                 |
+| `t`         | Moderated t statistic (used to rank genes for GSEA).                 |
+| `P.Value`   | p-value.                                                             |
+| `adj.P.Val` | Benjamini-Hochberg adjusted p-value.                                 |
+| `B`         | log-odds that the gene is differentially expressed.                  |
 
 Gene symbols are in the merged Salmon gene counts (`<aligner>/salmon.merged.gene_counts.tsv`, column `gene_name`), and
 in every table of the results report.
@@ -124,21 +124,21 @@ The tables contain every tested gene set, with the GMT file it came from in `col
 
 The report is a single HTML file with these pages:
 
-| Page                        | Content                                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Overview                    | Samples, contrasts, cut-offs used, and the number of DE genes and spliced events per contrast.              |
-| QC                          | Read counts, mapping and duplication rates from MultiQC.                                                    |
-| Sample structure            | PCA and sample correlation of the voom log-CPM values.                                                      |
-| DE summary                  | Up and down genes per contrast, overlaps between contrasts (UpSet and Euler plots).                         |
-| DE by contrast              | Volcano and MA plots, a searchable results table and a heatmap of the top genes, for each contrast.          |
-| Splicing summary            | Significant events per contrast and event type.                                                             |
-| Splicing by contrast        | ΔPSI volcano plot, ΔPSI by event type, an event table and a PSI heatmap of the top events per type.         |
-| DE × splicing               | log2FC against ΔPSI per gene, showing genes that are differentially expressed, spliced, both or neither.     |
-| Across contrasts            | With two or more contrasts: up/down counts, genes shared between contrasts, and log2FC and ΔPSI heatmaps.   |
-| Gene sets                   | GSEA summary across contrasts and, per contrast, the top enriched gene sets for expression and splicing.    |
-| KEGG maps                   | KEGG pathway maps of significant KEGG gene sets, coloured by log2FC or ΔPSI.                                |
-| Gene lookup                 | Type a gene symbol or Ensembl id to see its expression per sample, log2FC per contrast and its top events.  |
-| Methods                     | Methods text with the settings and software versions of the run, ready to adapt for a publication.          |
+| Page                 | Content                                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Overview             | Samples, contrasts, cut-offs used, and the number of DE genes and spliced events per contrast.             |
+| QC                   | Read counts, mapping and duplication rates from MultiQC.                                                   |
+| Sample structure     | PCA and sample correlation of the voom log-CPM values.                                                     |
+| DE summary           | Up and down genes per contrast, overlaps between contrasts (UpSet and Euler plots).                        |
+| DE by contrast       | Volcano and MA plots, a searchable results table and a heatmap of the top genes, for each contrast.        |
+| Splicing summary     | Significant events per contrast and event type.                                                            |
+| Splicing by contrast | ΔPSI volcano plot, ΔPSI by event type, an event table and a PSI heatmap of the top events per type.        |
+| DE × splicing        | log2FC against ΔPSI per gene, showing genes that are differentially expressed, spliced, both or neither.   |
+| Across contrasts     | With two or more contrasts: up/down counts, genes shared between contrasts, and log2FC and ΔPSI heatmaps.  |
+| Gene sets            | GSEA summary across contrasts and, per contrast, the top enriched gene sets for expression and splicing.   |
+| KEGG maps            | KEGG pathway maps of significant KEGG gene sets, coloured by log2FC or ΔPSI.                               |
+| Gene lookup          | Type a gene symbol or Ensembl id to see its expression per sample, log2FC per contrast and its top events. |
+| Methods              | Methods text with the settings and software versions of the run, ready to adapt for a publication.         |
 
 Pages appear only when their input exists: for example the splicing pages need `--rmats` and the gene set pages need
 `--gsea`.

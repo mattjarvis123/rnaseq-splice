@@ -109,26 +109,26 @@ treatment minus control. Gene set enrichment needs GMT files keyed by gene symbo
 
 ## Parameters added by this pipeline
 
-| Parameter                                       | Default                | Description                                                                                                                                       |
-| ----------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--contrasts`                                   |                        | Contrasts sheet (`contrast,treatment,control`). Required with `--rmats` or `--limma`.                                                             |
-| `--rmats`                                       | `false`                | Run rMATS differential splicing. Needs a genome aligner (default `star_salmon`).                                                                  |
-| `--rmats_read_len`                              | `40`                   | Read length given to rMATS. **Set this to your read length.**                                                                                     |
-| `--rmats_min_reads`                             | `10`                   | Keep events with at least this many junction reads (inclusion + skipping) in every replicate of both conditions, then recompute the FDR. `0` = off. |
-| `--rmats_splice_diff_cutoff`                    | `0.0001`               | rMATS `--cstat`.                                                                                                                                  |
-| `--rmats_paired_stats`                          | `false`                | Paired model (PAIRADISE); pairs the n-th treatment and control samples in samplesheet order.                                                      |
-| `--rmats_novel_splice_site`                     | `false`                | Detect unannotated splice sites (with `--rmats_min_intron_len`, `--rmats_max_exon_len`).                                                          |
-| `--limma`                                       | `false`                | Run limma/voom differential expression.                                                                                                           |
-| `--limma_min_count`                             | `10`                   | Keep genes with at least this many counts in at least as many samples as the smallest condition.                                                 |
-| `--limma_robust`                                | `false`                | Robust empirical Bayes moderation.                                                                                                                |
-| `--gsea` / `--gsea_gmt`                         | `false` /              | Run fgsea on the limma and rMATS results, with these comma-separated GMT files.                                                                   |
-| `--gsea_fdr`                                    | `0.05`                 | Adjusted p-value cut-off for enriched gene sets.                                                                                                  |
-| `--gsea_rank_by`                                | `t`                    | Rank genes by the moderated `t` statistic or by `logFC`.                                                                                          |
-| `--gsea_splicing_fdr` / `--gsea_splicing_dpsi`  | `0.01` / `0`           | Event cut-offs used to build the spliced-gene lists.                                                                                              |
-| `--report_de_fdr` / `--report_de_lfc`           | `0.01` / `0`           | Cut-offs the report uses to call differentially expressed genes.                                                                                  |
-| `--report_splicing_fdr` / `--report_splicing_dpsi` | `0.01` / `0`        | Cut-offs the report uses to call differentially spliced events.                                                                                   |
-| `--report_kegg_maps` / `--report_kegg_cache`    | `true` /               | Draw KEGG maps for significant KEGG gene sets; reuse map files from this folder.                                                                  |
-| `--skip_report`                                 | `false`                | Skip the HTML report.                                                                                                                             |
+| Parameter                                          | Default      | Description                                                                                                                                         |
+| -------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--contrasts`                                      |              | Contrasts sheet (`contrast,treatment,control`). Required with `--rmats` or `--limma`.                                                               |
+| `--rmats`                                          | `false`      | Run rMATS differential splicing. Needs a genome aligner (default `star_salmon`).                                                                    |
+| `--rmats_read_len`                                 | `40`         | Read length given to rMATS. **Set this to your read length.**                                                                                       |
+| `--rmats_min_reads`                                | `10`         | Keep events with at least this many junction reads (inclusion + skipping) in every replicate of both conditions, then recompute the FDR. `0` = off. |
+| `--rmats_splice_diff_cutoff`                       | `0.0001`     | rMATS `--cstat`.                                                                                                                                    |
+| `--rmats_paired_stats`                             | `false`      | Paired model (PAIRADISE); pairs the n-th treatment and control samples in samplesheet order.                                                        |
+| `--rmats_novel_splice_site`                        | `false`      | Detect unannotated splice sites (with `--rmats_min_intron_len`, `--rmats_max_exon_len`).                                                            |
+| `--limma`                                          | `false`      | Run limma/voom differential expression.                                                                                                             |
+| `--limma_min_count`                                | `10`         | Keep genes with at least this many counts in at least as many samples as the smallest condition.                                                    |
+| `--limma_robust`                                   | `false`      | Robust empirical Bayes moderation.                                                                                                                  |
+| `--gsea` / `--gsea_gmt`                            | `false` /    | Run fgsea on the limma and rMATS results, with these comma-separated GMT files.                                                                     |
+| `--gsea_fdr`                                       | `0.05`       | Adjusted p-value cut-off for enriched gene sets.                                                                                                    |
+| `--gsea_rank_by`                                   | `t`          | Rank genes by the moderated `t` statistic or by `logFC`.                                                                                            |
+| `--gsea_splicing_fdr` / `--gsea_splicing_dpsi`     | `0.01` / `0` | Event cut-offs used to build the spliced-gene lists.                                                                                                |
+| `--report_de_fdr` / `--report_de_lfc`              | `0.01` / `0` | Cut-offs the report uses to call differentially expressed genes.                                                                                    |
+| `--report_splicing_fdr` / `--report_splicing_dpsi` | `0.01` / `0` | Cut-offs the report uses to call differentially spliced events.                                                                                     |
+| `--report_kegg_maps` / `--report_kegg_cache`       | `true` /     | Draw KEGG maps for significant KEGG gene sets; reuse map files from this folder.                                                                    |
+| `--skip_report`                                    | `false`      | Skip the HTML report.                                                                                                                               |
 
 The pipeline never filters results by significance: every tested gene, event and gene set is written out, and the
 report cut-offs only affect what the report highlights. All nf-core/rnaseq parameters still apply; see the
@@ -169,12 +169,12 @@ The pipeline runs on a laptop, a shared server or an HPC cluster with the **SLUR
 scheduler, where Nextflow submits every task as its own job. Ready-to-edit templates are in
 [conf/examples/](conf/examples/):
 
-| Template                                       | For                                                       |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| `local_docker.config`                          | Laptop or workstation with Docker                         |
-| `server_apptainer.config`                      | Shared Linux server without a scheduler, with Apptainer   |
-| `slurm_apptainer.config` + `submit_slurm.sh`   | SLURM cluster with Apptainer                              |
-| `pbs_apptainer.config` + `submit_pbs.sh`       | PBS Pro or Torque/OpenPBS cluster with Apptainer          |
+| Template                                     | For                                                     |
+| -------------------------------------------- | ------------------------------------------------------- |
+| `local_docker.config`                        | Laptop or workstation with Docker                       |
+| `server_apptainer.config`                    | Shared Linux server without a scheduler, with Apptainer |
+| `slurm_apptainer.config` + `submit_slurm.sh` | SLURM cluster with Apptainer                            |
+| `pbs_apptainer.config` + `submit_pbs.sh`     | PBS Pro or Torque/OpenPBS cluster with Apptainer        |
 
 ```bash
 # SLURM: edit the partition, account and paths, then submit the pipeline's head job
@@ -189,16 +189,16 @@ container caches, compute nodes without internet access and network storage.
 
 The pipeline follows the nf-core layout. Code added on top of nf-core/rnaseq lives in its own files where possible:
 
-| Addition                                   | Source                                                       | Location                                                                                                    |
-| ------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| rMATS subworkflow (prep, BAM lists, post)  | nf-core/rnasplice 2.0.0                                      | `subworkflows/local/rmats/`, `modules/nf-core/rmats/prep/`, `modules/local/rmats/post/`, `modules/local/createbamlist/` |
-| rMATS coverage filter                      | new                                                          | `modules/local/rmats/filter/`, `bin/rmats_filter.R`                                                         |
-| limma/voom subworkflow                     | nf-core/modules `custom/matrixfilter`, `limma/differential`  | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/`        |
-| Gene set enrichment                        | new (fgsea)                                                  | `subworkflows/local/gsea/`, `modules/local/fgsea/`, `bin/fgsea_de.R`, `bin/fgsea_splicing.R`                |
-| Results report                             | new (R Markdown, flexdashboard)                              | `modules/local/rnaseq_splice_report/`, `assets/report/`                                                     |
-| Process settings                           | ported from nf-core/rnasplice, and new                       | `conf/modules/{rmats,limma,gsea,report}.config`                                                             |
-| `condition` column and contrasts sheet     | nf-core/rnasplice                                            | `assets/schema_input.json`, `assets/schema_contrasts.json`                                                  |
-| Test profile                               | new                                                          | `conf/test_rmats.config`, `assets/test/`                                                                    |
+| Addition                                  | Source                                                      | Location                                                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| rMATS subworkflow (prep, BAM lists, post) | nf-core/rnasplice 2.0.0                                     | `subworkflows/local/rmats/`, `modules/nf-core/rmats/prep/`, `modules/local/rmats/post/`, `modules/local/createbamlist/` |
+| rMATS coverage filter                     | new                                                         | `modules/local/rmats/filter/`, `bin/rmats_filter.R`                                                                     |
+| limma/voom subworkflow                    | nf-core/modules `custom/matrixfilter`, `limma/differential` | `subworkflows/local/differential_limma/`, `modules/nf-core/{custom/matrixfilter,limma/differential}/`                   |
+| Gene set enrichment                       | new (fgsea)                                                 | `subworkflows/local/gsea/`, `modules/local/fgsea/`, `bin/fgsea_de.R`, `bin/fgsea_splicing.R`                            |
+| Results report                            | new (R Markdown, flexdashboard)                             | `modules/local/rnaseq_splice_report/`, `assets/report/`                                                                 |
+| Process settings                          | ported from nf-core/rnasplice, and new                      | `conf/modules/{rmats,limma,gsea,report}.config`                                                                         |
+| `condition` column and contrasts sheet    | nf-core/rnasplice                                           | `assets/schema_input.json`, `assets/schema_contrasts.json`                                                              |
+| Test profile                              | new                                                         | `conf/test_rmats.config`, `assets/test/`                                                                                |
 
 Edits to upstream files are limited to small blocks in `workflows/rnaseq/main.nf`, `nextflow.config`,
 `nextflow_schema.json`, `assets/schema_input.json` and `modules.json`, so new nf-core/rnaseq releases can be merged in:
