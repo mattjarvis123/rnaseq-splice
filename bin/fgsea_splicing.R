@@ -64,7 +64,9 @@ message(sprintf("Read %d gene sets from %s", length(gs$sets), opts$gmt))
 # ---- rMATS events -> gene lists ------------------------------------------------------------
 mats_files <- trimws(strsplit(opts$mats, ",")[[1]])
 events <- rbindlist(lapply(mats_files, function(f) {
-    d <- fread(f, select = c("geneSymbol", "FDR", "IncLevelDifference"), data.table = TRUE)
+    # sep/dec fixed: with 2 replicates per group the count columns ("18,5") look like decimal-comma
+    # numbers, and fread's auto-detection would then switch to dec = "," and read FDR/dPSI as text
+    d <- fread(f, sep = "\t", dec = ".", select = c("geneSymbol", "FDR", "IncLevelDifference"), data.table = TRUE)
     d[, event_type := sub("\\.MATS\\..*$", "", basename(f))]
     d
 }))

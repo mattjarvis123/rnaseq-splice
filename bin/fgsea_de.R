@@ -64,9 +64,9 @@ gs <- read_gmts(opts$gmt)
 message(sprintf("Read %d gene sets from %s", length(gs$sets), opts$gmt))
 
 # ---- ranked gene list ----------------------------------------------------------------------
-res <- fread(opts$results, data.table = FALSE)
+res <- fread(opts$results, sep = "\t", dec = ".", data.table = FALSE)
 if (!opts$rank_by %in% colnames(res)) stop("--rank_by column '", opts$rank_by, "' not in ", opts$results)
-map <- unique(fread(opts$gene_map, select = c("gene_id", "gene_name"), data.table = FALSE))
+map <- unique(fread(opts$gene_map, sep = "\t", dec = ".", select = c("gene_id", "gene_name"), data.table = FALSE))
 map <- map[!duplicated(map$gene_id), ]
 
 res$gene_name <- map$gene_name[match(res$gene_id, map$gene_id)]
