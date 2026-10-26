@@ -40,9 +40,18 @@ jobs:
         with:
           version: ${{ matrix.NXF_VER }}
 
+      # Runner size differs (private repos: 2 CPUs / ~8 GB; public repos: 4 CPUs / 16 GB), so cap
+      # every task to what this runner has, leaving 1 GB for Nextflow and the system
+      - name: Fit resource limits to the runner
+        run: |
+          CPUS=$(nproc)
+          MEM_GB=$(( $(free -g | awk '/^Mem:/ {print $2}') - 1 ))
+          printf "process.resourceLimits = [cpus: %d, memory: '%d.GB', time: '1.h']\n" "$CPUS" "$MEM_GB" > ci_resources.config
+          cat ci_resources.config
+
       - name: Run pipeline with test_rmats profile
         run: |
-          nextflow run ${GITHUB_WORKSPACE} -profile test_rmats,docker --outdir ./results
+          nextflow run ${GITHUB_WORKSPACE} -profile test_rmats,docker -c ci_resources.config --outdir ./results
 
       - name: Upload results report
         if: success()
