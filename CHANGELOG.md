@@ -21,6 +21,9 @@ runs as nf-core/rnaseq 3.27.0.
 - HTML results report as the final step (`RNASEQ_SPLICE_REPORT`, `--skip_report` to turn off), with QC, sample
   structure, DE and splicing pages, cross-contrast views, gene set results, KEGG pathway maps and a gene lookup.
 - `test_rmats` profile; documentation in `docs/splice_usage.md` and `docs/splice_output.md`.
+- GitHub Actions: `Pipeline test` runs the `test_rmats` profile with Docker on Nextflow 25.10.4 and the latest
+  release, and `Lint` runs the pre-commit formatting checks; nf-core-specific workflows were removed, and the issue and
+  pull-request templates and `docs/CONTRIBUTING.md` were rewritten for this repository.
 - Example configs in `conf/examples/` for a Docker workstation, a shared server, and SLURM and PBS clusters with
   Apptainer, with head-job submission scripts (`submit_slurm.sh`, `submit_pbs.sh`).
 

@@ -7,8 +7,8 @@ body:
       value: |
         Before you post this issue, please check the documentation:
 
-        - [nf-core website: troubleshooting](https://nf-co.re/usage/troubleshooting)
-        - [nf-core/rnaseq pipeline documentation](https://nf-co.re/rnaseq/usage)
+        - [rnaseq-splice usage](https://github.com/mattjarvis123/rnaseq-splice/blob/main/docs/splice_usage.md)
+        - [nf-core troubleshooting](https://nf-co.re/docs/usage/troubleshooting) for general Nextflow problems
   - type: textarea
     id: description
     attributes:
@@ -21,10 +21,10 @@ body:
     id: command_used
     attributes:
       label: Command used and terminal output
-      description: Steps to reproduce the behaviour. Please paste the command you used to launch the pipeline and the output from your terminal.
+      description: Please paste the command you used to launch the pipeline, your params file if you used one, and the output from your terminal.
       render: console
       placeholder: |
-        $ nextflow run ...
+        $ nextflow run mattjarvis123/rnaseq-splice ...
 
         Some output where something broke
 
@@ -34,16 +34,16 @@ body:
       label: Relevant files
       description: |
         Please drag and drop the relevant files here. Create a `.zip` archive if the extension is not allowed.
-        Your verbose log file `.nextflow.log` is often useful _(this is a hidden file in the directory where you launched the pipeline)_ as well as custom Nextflow configuration files.
+        The `.nextflow.log` file in the launch folder (a hidden file) is often useful, as are any custom config files.
 
   - type: textarea
     id: system
     attributes:
       label: System information
       description: |
-        * Nextflow version _(eg. 23.04.0)_
-        * Hardware _(eg. HPC, Desktop, Cloud)_
-        * Executor _(eg. slurm, local, awsbatch)_
-        * Container engine: _(e.g. Docker, Singularity, Conda, Podman, Shifter, Charliecloud, or Apptainer)_
-        * OS _(eg. CentOS Linux, macOS, Linux Mint)_
-        * Version of nf-core/rnaseq _(eg. 1.1, 1.5, 1.8.2)_
+        * rnaseq-splice version or commit _(eg. 1.0.0)_
+        * Nextflow version _(eg. 26.04.6)_
+        * Hardware _(eg. laptop, server, HPC, cloud)_
+        * Executor _(eg. local, slurm, pbspro)_
+        * Container engine _(eg. Docker, Apptainer, Singularity)_
+        * OS _(eg. macOS, Ubuntu, Rocky Linux)_

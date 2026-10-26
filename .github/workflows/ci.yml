@@ -1,0 +1,64 @@
+name: Pipeline test
+# Runs the test_rmats profile (nf-core/rnaseq test data with rMATS, limma/voom and the results
+# report) with Docker, on the oldest supported and the latest Nextflow release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NXF_ANSI_LOG: false
+
+jobs:
+  test:
+    name: test_rmats (Nextflow ${{ matrix.NXF_VER }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        NXF_VER:
+          - "25.10.4"
+          - "latest-everything"
+    steps:
+      - name: Check out pipeline code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+
+      - name: Install Nextflow
+        uses: nf-core/setup-nextflow@893c28b667aedeba26e37f296d260ccc5bc4d914 # v3
+        with:
+          version: ${{ matrix.NXF_VER }}
+
+      - name: Run pipeline with test_rmats profile
+        run: |
+          nextflow run ${GITHUB_WORKSPACE} -profile test_rmats,docker --outdir ./results
+
+      - name: Upload results report
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-report-nextflow-${{ matrix.NXF_VER }}
+          path: results/report/
+          retention-days: 14
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: logs-nextflow-${{ matrix.NXF_VER }}
+          path: |
+            .nextflow.log
+            results/pipeline_info/
+          include-hidden-files: true
+          retention-days: 14

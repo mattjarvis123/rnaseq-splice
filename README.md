@@ -1,5 +1,7 @@
 # rnaseq-splice
 
+[![Pipeline test](https://github.com/mattjarvis123/rnaseq-splice/actions/workflows/ci.yml/badge.svg)](https://github.com/mattjarvis123/rnaseq-splice/actions/workflows/ci.yml)
+[![Lint](https://github.com/mattjarvis123/rnaseq-splice/actions/workflows/lint.yml/badge.svg)](https://github.com/mattjarvis123/rnaseq-splice/actions/workflows/lint.yml)
 [![Nextflow](https://img.shields.io/badge/nextflow-%E2%89%A525.10.4-0DC09D?logo=nextflow&logoColor=white)](https://www.nextflow.io/)
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with apptainer](https://img.shields.io/badge/run%20with-apptainer%2Fsingularity-1d355c?labelColor=000000)](https://apptainer.org/)
