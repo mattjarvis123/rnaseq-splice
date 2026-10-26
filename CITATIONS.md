@@ -54,6 +54,10 @@
 
   > Bray NL, Pimentel H, Melsted P, Pachter L. Near-optimal probabilistic RNA-seq quantification. Nat Biotechnol. 2016 May;34(5):525-7. doi: 10.1038/nbt.3519. Epub 2016 Apr 4. PubMed PMID: 27043002.
 
+- [KEGG](https://pubmed.ncbi.nlm.nih.gov/10592173/) (rnaseq-splice report pathway maps)
+
+  > Kanehisa M, Goto S. KEGG: Kyoto Encyclopedia of Genes and Genomes. Nucleic Acids Res. 2000 Jan 1;28(1):27-30. doi: 10.1093/nar/28.1.27. PubMed PMID: 10592173.
+
 - [Kraken2](https://doi.org/10.1186/s13059-019-1891-0)
 
   > Wood, D. E., Lu, J., & Langmead, B. (2019). Improved metagenomic analysis with Kraken 2. Genome Biology, 20(1), 257. https://doi.org/10.1186/s13059-019-1891-0
@@ -155,6 +159,10 @@
 - [optparse](https://CRAN.R-project.org/package=optparse)
 
   > Trevor L Davis (2018). optparse: Command Line Option Parser.
+
+- [pathview](https://pubmed.ncbi.nlm.nih.gov/23740750/) (rnaseq-splice report pathway maps)
+
+  > Luo W, Brouwer C. Pathview: an R/Bioconductor package for pathway-based data integration and visualization. Bioinformatics. 2013 Jul 15;29(14):1830-1. doi: 10.1093/bioinformatics/btt285. PubMed PMID: 23740750.
 
 - [pheatmap](https://CRAN.R-project.org/package=pheatmap)
 

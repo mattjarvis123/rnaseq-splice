@@ -185,7 +185,7 @@ dt_table <- function(df, numeric_cols = NULL, sci_cols = NULL, page_len = 15, fi
     dt
 }
 
-# Up/down bar chart in the style of Matt's InSphero DEG plots (ggplot geom_col + theme_bw,
+# Up/down bar chart (ggplot geom_col + theme_bw,
 # scale_fill_manual(c("cornflowerblue", "orange2"))): up counts as positive orange bars, down counts
 # as negative blue bars, each labelled with its absolute count; hovering shows the count too.
 updown_barplot <- function(x, n_up, n_down, up_name = "Up", down_name = "Down",
@@ -514,7 +514,7 @@ htmltools::tagList(
     if (nzchar(params$project)) tags$p(tags$b("Project: "), params$project),
     tags$p(tags$b("Generated: "), format(Sys.time(), "%Y-%m-%d %H:%M %Z")),
     tags$p(tags$b("Results folder: "), tags$code(if (nzchar(params$results_label)) params$results_label
-                                                 else normalizePath(params$results_dir, mustWork = FALSE))),
+                                                 else basename(normalizePath(params$results_dir, mustWork = FALSE)))),
     tags$p(
         "Differential expression from limma/voom and differential splicing from rMATS, ",
         "both computed by the rnaseq-splice pipeline for every contrast below. ",

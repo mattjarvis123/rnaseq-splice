@@ -9,7 +9,7 @@
 #       [--rmats_counts JC] [--heatmap_top_n 50] [--event_heatmap_per_type 15] [--event_heatmap_scale z|psi] \
 #       [--lookup_events_per_gene 3] [--kegg_maps true] [--kegg_top_n 8] [--kegg_cache <dir>] \
 #       [--table_max_rows 5000] [--plot_max_points 20000] [--plot_ns_points 2000] \
-#       [--title "rnaseq-splice report"] [--project ""] [--results_label <path shown in the report>]
+#       [--title "rnaseq-splice report"] [--project ""] [--results_label <results folder name shown in the report; default: basename of --results_dir>]
 #
 # Significance cut-offs (the pipeline itself never filters; only the report applies them). Each one is
 # taken from the first of these that sets it:

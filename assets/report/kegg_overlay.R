@@ -1,5 +1,9 @@
 # kegg_overlay.R - colour KEGG pathway maps with log2FC or dPSI values (rnaseq-splice report)
 #
+# Uses the pathview Bioconductor package: Luo W, Brouwer C. Pathview: an R/Bioconductor package for
+# pathway-based data integration and visualization. Bioinformatics. 2013;29(14):1830-1831.
+# doi:10.1093/bioinformatics/btt285. KEGG maps: Kanehisa M, Goto S. Nucleic Acids Res. 2000;28(1):27-30.
+#
 # Reworked from Matt Jarvis's pathview.R (R_Functions/pathview.R, pathPlot()): KEGG's KGML and
 # PNG files are fetched from the KEGG REST API, gene nodes are mapped and coloured with pathview's
 # node.map() / node.color() / render.kegg.node(), and the colour key and a title are drawn on top.

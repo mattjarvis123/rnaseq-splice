@@ -22,7 +22,7 @@ htmltools::tagList(
     tags$p(style = "color:#555;", "The maps are not stored in this page: each one is loaded from ",
            tags$code(paste0(tables_link, "/kegg/")), " when picked, so keep that folder next to the report."),
     if (length(km_missing)) tags$p(style = "color:#b00;", "KEGG files could not be found or downloaded for: ",
-                                   paste(km_missing, collapse = ", "), ". Check the KEGG cache folder (", tags$code(kegg_cache), ").")
+                                   paste(km_missing, collapse = ", "), ". Check the KEGG cache folder (", tags$code("--report_kegg_cache"), ") or the connection to rest.kegg.jp.")
 )
 ```
 
