@@ -22,7 +22,7 @@ module load nextflow apptainer 2>/dev/null || true   # or however your cluster p
 export NXF_OPTS='-Xms1g -Xmx4g'                                   # memory for Nextflow itself
 export NXF_APPTAINER_CACHEDIR=/shared/containers/apptainer_cache   # shared container cache
 
-nextflow run mattjarvis123/rnaseq-splice -r main \
+nextflow run mattjarvis123/rnaseq-splice -r 1.0.0 \
     -profile apptainer \
     -c pbs_apptainer.config \
     -params-file params.yaml \

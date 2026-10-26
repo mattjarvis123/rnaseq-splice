@@ -57,7 +57,7 @@ two can be compared gene by gene.
    switched on:
 
    ```bash
-   nextflow run mattjarvis123/rnaseq-splice -r main -profile test_rmats,docker --outdir test_results
+   nextflow run mattjarvis123/rnaseq-splice -r 1.0.0 -profile test_rmats,docker --outdir test_results
    ```
 
 3. Run your own data. Write the settings in a parameters file (recommended: see
@@ -78,10 +78,11 @@ two can be compared gene by gene.
    ```
 
    ```bash
-   nextflow run mattjarvis123/rnaseq-splice -r main -profile docker -params-file params.yaml
+   nextflow run mattjarvis123/rnaseq-splice -r 1.0.0 -profile docker -params-file params.yaml
    ```
 
-   Use a release tag (for example `-r 1.0.0`) instead of `main` for reproducible runs once one is available.
+   `-r` pins the pipeline release, so a run can be repeated exactly; see
+   [releases](https://github.com/mattjarvis123/rnaseq-splice/releases) for the latest version.
 
 ### Inputs
 
